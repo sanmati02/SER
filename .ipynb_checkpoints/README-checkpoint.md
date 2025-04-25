@@ -1,10 +1,4 @@
-Commands for installation:  
 
-conda install pytorch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 pytorch-cuda=11.8 -c pytorch -c nvidia
-python -m pip install mser -U -i https://pypi.tuna.tsinghua.edu.cn/simple
-git clone https://github.com/yeyupiaoling/SpeechEmotionRecognition-Pytorch.git
-cd SpeechEmotionRecognition-Pytorch/
-pip install .
 
 
 1. Change config/bi_lstm to this if features are not extracted: 
