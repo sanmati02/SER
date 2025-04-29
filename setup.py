@@ -6,7 +6,7 @@ import mser
 
 VERSION = mser.__version__
 
-# 复制配置文件到项目目录下
+# Copy the configuration files into the project directory
 shutil.rmtree('./mser/configs/', ignore_errors=True)
 shutil.copytree('./configs/', './mser/configs/')
 
@@ -47,8 +47,10 @@ if __name__ == "__main__":
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: 3.8',
-            'Programming Language :: Python :: 3.9', 'Topic :: Utilities'
+            'Programming Language :: Python :: 3.9',
+            'Topic :: Utilities'
         ],
         license='Apache License 2.0',
-        ext_modules=[])
+        ext_modules=[]
+    )
     shutil.rmtree('./mser/configs/', ignore_errors=True)

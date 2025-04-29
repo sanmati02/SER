@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-# 计算准确率
+# Compute Accuracy
 def accuracy(output, label):
     output = torch.nn.functional.softmax(output, dim=-1)
     output = output.data.cpu().numpy()

@@ -1,76 +1,88 @@
-# 数据集参数
+# Dataset Parameters
 dataset_conf:
   dataset:
-    # 过滤最短的音频长度
+    # Minimum audio duration (seconds); shorter samples are filtered out
     min_duration: 0.4
-    # 最长的音频长度，大于这个长度会裁剪掉
+    # Maximum audio duration (seconds); longer samples are truncated
     max_duration: 3
-    # 音频的采样率
+    # Audio sampling rate (Hz)
     sample_rate: 16000
-    # 是否对音频进行音量归一化
+    # Whether to apply volume normalization
     use_dB_normalization: True
-    # 对音频进行音量归一化的音量分贝值
+    # Target dB value for volume normalization
     target_dB: -20
-    # 归一化文件路径
+    # Path to normalization scaler file
     scaler_path: 'dataset/standard.m'
+
   dataLoader:
-    # 训练的批量大小
+    # Batch size for training
     batch_size: 64
-    # 是否丢弃最后一个样本
+    # Whether to drop the last incomplete batch
     drop_last: True
-    # 读取数据的线程数量
+    # Number of worker threads for data loading
     num_workers: 4
-  # 训练数据的数据列表路径
+
+  # Path to training data list
   train_list: 'dataset/train_list_features.txt'
-  # 测试数据的数据列表路径
+  # Path to testing data list
   test_list: 'dataset/test_list_features.txt'
-  # 标签列表
+  # Path to label list
   label_list_path: 'dataset/label_list.txt'
-  # 评估的数据要特殊处理
+
+  # Special evaluation settings
   eval_conf:
-    # 评估的批量大小
+    # Batch size for evaluation
     batch_size: 1
-    # 最长的音频长度
+    # Maximum audio duration allowed during evaluation (seconds)
     max_duration: 5
 
-# 数据预处理参数
+# Data Preprocessing Parameters
 preprocess_conf:
-  # 音频预处理方法，支持：CustomFeature、Emotion2Vec
+  # Audio feature extraction method (supported: CustomFeature, Emotion2Vec)
   feature_method: 'CustomFeature'
   method_args:
+    # Feature extraction granularity
     granularity: 'utterance'
+    # Type of features to extract
     feature_type: 'mfcc'
 
+# Model Parameters
 model_conf:
-  # 所使用的模型
+  # Model to use
   model: 'BiLSTM'
-  # 模型参数
   model_args:
-    # 分类大小，如果为null，自动通过标签列表获取
+    # Number of output classes; if null, automatically determined from label list
     num_class: null
 
+# Optimizer Parameters
 optimizer_conf:
-  # 优化方法
+  # Optimization method
   optimizer: 'Adam'
-  # 优化方法参数
   optimizer_args:
+    # Learning rate
     lr: 0.001
+    # Weight decay (regularization)
     weight_decay: !!float 1e-5
-  # 学习率衰减函数，支持Pytorch支持的和项目提供的WarmupCosineSchedulerLR
+
+  # Learning rate scheduler (supports both PyTorch schedulers and WarmupCosineSchedulerLR)
   scheduler: 'WarmupCosineSchedulerLR'
-  # 学习率衰减函数参数
   scheduler_args:
+    # Minimum learning rate
     min_lr: !!float 1e-5
+    # Maximum learning rate
     max_lr: 0.001
+    # Number of warm-up epochs
     warmup_epoch: 5
 
+# Training Parameters
 train_conf:
-  # 是否开启自动混合精度
+  # Enable Automatic Mixed Precision (AMP)
   enable_amp: False
-  # 是否使用Pytorch2.0的编译器
+  # Use PyTorch 2.0 compilation for optimization
   use_compile: False
-  # CrossEntropyLoss类的label_smoothing参数
+  # Label smoothing value for CrossEntropyLoss
   label_smoothing: 0.0
-  # 训练的轮数
+  # Maximum number of training epochs
   max_epoch: 60
+  # Log training status every N iterations
   log_interval: 10

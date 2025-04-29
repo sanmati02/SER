@@ -6,16 +6,17 @@ from mser.utils.utils import add_arguments, print_arguments
 
 parser = argparse.ArgumentParser(description=__doc__)
 add_arg = functools.partial(add_arguments, argparser=parser)
-add_arg('configs',          str,    'configs/bi_lstm.yml',      '配置文件')
-add_arg('save_dir',         str,    'dataset/features',         '保存特征的路径')
-add_arg('max_duration',    int,     100,                        '提取特征的最大时长，单位秒')
+add_arg('configs',          str,    'configs/bi_lstm.yml',      'Configuration file')
+add_arg('save_dir',         str,    'dataset/features',         'Path to save extracted features')
+add_arg('max_duration',     int,     100,                       'Maximum duration for feature extraction (in seconds)')
 args = parser.parse_args()
 print_arguments(args=args)
 
-# 获取训练器
+# Get the trainer
 trainer = MSERTrainer(configs=args.configs)
 
-# 提取特征保存文件
+# Extract features and save them
 trainer.extract_features(save_dir=args.save_dir, max_duration=args.max_duration)
-# 生成归一化文件
+
+# Generate normalization file
 trainer.get_standard_file(max_duration=args.max_duration)

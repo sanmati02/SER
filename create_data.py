@@ -3,7 +3,7 @@ import os
 from mser.trainer import MSERTrainer
 
 
-# 生成数据列表
+# Generate data lists
 def get_data_list(audio_path, list_path):
     sound_sum = 0
     audios = os.listdir(audio_path)
@@ -24,13 +24,15 @@ def get_data_list(audio_path, list_path):
             sound_sum += 1
     f_label.close()
     f_train.close()
+    f_test.close()
 
 
 def create_ravdess_list(audio_dir, list_path):
-    labels = ["中性", "平静", "快乐", "悲伤", "愤怒", "恐惧", "厌恶", "惊讶"]
+    labels = ["Neutral", "Calm", "Happy", "Sad", "Angry", "Fearful", "Disgusted", "Surprised"]
     with open(os.path.join(list_path, 'label_list.txt'), 'w', encoding='utf-8') as f:
         for label in labels:
             f.write(f'{label}\n')
+
     data_list = {}
     for d in os.listdir(audio_dir):
         actor_dir = os.path.join(audio_dir, d)
@@ -41,6 +43,7 @@ def create_ravdess_list(audio_dir, list_path):
                 data_list[emotion_id] = [path]
             else:
                 data_list[emotion_id].append(path)
+
     f_train = open(os.path.join(list_path, 'train_list.txt'), 'w', encoding='utf-8')
     f_test = open(os.path.join(list_path, 'test_list.txt'), 'w', encoding='utf-8')
 
@@ -55,7 +58,7 @@ def create_ravdess_list(audio_dir, list_path):
     f_train.close()
 
 
-# 生成归一化文件
+# Generate normalization file
 def create_standard(config_file):
     trainer = MSERTrainer(configs=config_file)
     trainer.get_standard_file()
