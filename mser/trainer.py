@@ -400,7 +400,7 @@ class MSERTrainer(object):
                 resume_model = os.path.join(resume_model, 'model.pth')
             assert os.path.exists(resume_model), f"{resume_model} Model does not exist!"
             model_state_dict = torch.load(resume_model, weights_only=False)
-            self.model.load_state_dict(model_state_dict)
+            self.model.load_state_dict(model_state_dict, strict=False)
             logger.info(f'Successfully loaded model: {resume_model}')
         self.model.eval()
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
