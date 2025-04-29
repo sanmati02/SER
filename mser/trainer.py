@@ -26,6 +26,8 @@ from mser.models import build_model
 from mser.optimizer import build_optimizer, build_lr_scheduler
 from mser.utils.checkpoint import load_pretrained, load_checkpoint, save_checkpoint
 from mser.utils.utils import dict_to_object, plot_confusion_matrix, print_arguments, convert_string_based_on_type
+import matplotlib.pyplot as plt
+from datetime import datetime
 
 
 class MSERTrainer(object):
@@ -89,6 +91,11 @@ class MSERTrainer(object):
         self.test_dataset = None
         self.test_loader = None
         self.amp_scaler = None
+
+        self.epoch_train_loss = []
+        self.epoch_train_acc = []
+        self.epoch_eval_loss = []
+        self.epoch_eval_acc = []
 
         if isinstance(data_augment_configs, str):
             with open(data_augment_configs, 'r', encoding='utf-8') as f:
@@ -230,16 +237,13 @@ class MSERTrainer(object):
             self.model = torch.compile(self.model, mode="reduce-overhead")
 
     def __train_epoch(self, epoch_id, local_rank, writer, nranks=0):
-        """Train for one epoch
-
-        :param epoch_id: Current epoch ID
-        :param local_rank: Local GPU ID
-        :param writer: VisualDL writer object
-        :param nranks: Number of GPUs used
-        """
-
+        """Train for one epoch"""
+        epoch_total_loss = 0.0
+        epoch_total_correct = 0
+        epoch_total_samples = 0
         train_times, accuracies, loss_sum = [], [], []
         start = time.time()
+    
         for batch_id, (features, label, input_lens_ratio) in enumerate(self.train_loader):
             if self.stop_train: break
             if nranks > 1:
@@ -248,19 +252,18 @@ class MSERTrainer(object):
             else:
                 features = features.to(self.device)
                 label = label.to(self.device).long()
-
+    
             with torch.autocast('cuda', enabled=self.configs.train_conf.enable_amp):
                 output = self.model(features)
-
+    
             los = self.loss(output, label)
-
+    
             if self.configs.train_conf.enable_amp:
-
                 scaled = self.amp_scaler.scale(los)
                 scaled.backward()
             else:
                 los.backward()
-
+    
             if self.configs.train_conf.enable_amp:
                 self.amp_scaler.unscale_(self.optimizer)
                 self.amp_scaler.step(self.optimizer)
@@ -268,20 +271,22 @@ class MSERTrainer(object):
             else:
                 self.optimizer.step()
             self.optimizer.zero_grad()
-
-
+    
             acc = accuracy(output, label)
             accuracies.append(acc)
             loss_sum.append(los.data.cpu().numpy())
             train_times.append((time.time() - start) * 1000)
+    
+            batch_size = label.size(0)
+            epoch_total_loss += los.item() * batch_size
+            epoch_total_correct += acc * batch_size
+            epoch_total_samples += batch_size
+    
             self.train_step += 1
-
-
+    
             if batch_id % self.configs.train_conf.log_interval == 0 and local_rank == 0:
-
                 train_speed = self.configs.dataset_conf.dataLoader.batch_size / (
                         sum(train_times) / len(train_times) / 1000)
-
                 self.train_eta_sec = (sum(train_times) / len(train_times)) * (self.max_step - self.train_step) / 1000
                 eta_str = str(timedelta(seconds=int(self.train_eta_sec)))
                 self.train_loss = sum(loss_sum) / len(loss_sum)
@@ -298,6 +303,11 @@ class MSERTrainer(object):
                 self.train_log_step += 1
             start = time.time()
             self.scheduler.step()
+    
+        avg_loss = epoch_total_loss / epoch_total_samples
+        avg_acc = epoch_total_correct / epoch_total_samples
+        return avg_loss, avg_acc
+
 
     def train(self,
               save_model_path='models/',
@@ -313,6 +323,7 @@ class MSERTrainer(object):
         :param max_epoch: Maximum training epochs
         :param resume_model: Path to checkpoint to resume training
         :param pretrained_model: Path to pretrained model
+
         """
         nranks = torch.cuda.device_count()
         local_rank = 0
@@ -320,6 +331,8 @@ class MSERTrainer(object):
         if local_rank == 0:
 
             writer = LogWriter(logdir=log_dir)
+
+        
 
         if nranks > 1 and self.use_gpu:
 
@@ -354,20 +367,31 @@ class MSERTrainer(object):
         self.max_step = len(self.train_loader) * self.configs.train_conf.max_epoch
         self.train_step = max(last_epoch, 0) * len(self.train_loader)
 
+        epochs_since_improvement = 0
+        early_stopping_patience = 10
+
         for epoch_id in range(last_epoch, self.configs.train_conf.max_epoch):
             if self.stop_train: break
             epoch_id += 1
             start_epoch = time.time()
-
-            self.__train_epoch(epoch_id=epoch_id, local_rank=local_rank, writer=writer, nranks=nranks)
-
+        
+            avg_loss, avg_acc = self.__train_epoch(epoch_id=epoch_id, local_rank=local_rank, writer=writer, nranks=nranks)
+        
             if local_rank == 0:
+                self.epoch_train_loss.append(avg_loss)
+                self.epoch_train_acc.append(avg_acc)
+                writer.add_scalar('Train/Epoch_Loss', avg_loss, epoch_id)
+                writer.add_scalar('Train/Epoch_Accuracy', avg_acc, epoch_id)
+        
                 if self.stop_eval: continue
                 logger.info('=' * 70)
                 self.eval_loss, self.eval_acc = self.evaluate()
                 logger.info('Test epoch: {}, time/epoch: {}, loss: {:.5f}, accuracy: {:.5f}'.format(
                     epoch_id, str(timedelta(seconds=(time.time() - start_epoch))), self.eval_loss, self.eval_acc))
                 logger.info('=' * 70)
+                self.epoch_eval_loss.append(self.eval_loss)
+                self.epoch_eval_acc.append(self.eval_acc)
+        
                 writer.add_scalar('Test/Accuracy', self.eval_acc, self.test_log_step)
                 writer.add_scalar('Test/Loss', self.eval_loss, self.test_log_step)
                 self.test_log_step += 1
@@ -375,13 +399,57 @@ class MSERTrainer(object):
 
                 if self.eval_acc >= best_acc:
                     best_acc = self.eval_acc
+                    epochs_since_improvement = 0
                     save_checkpoint(configs=self.configs, model=self.model, optimizer=self.optimizer,
                                     amp_scaler=self.amp_scaler, save_model_path=save_model_path, epoch_id=epoch_id,
                                     accuracy=self.eval_acc, best_model=True)
-
+                else:
+                    epochs_since_improvement += 1
+        
                 save_checkpoint(configs=self.configs, model=self.model, optimizer=self.optimizer,
                                 amp_scaler=self.amp_scaler, save_model_path=save_model_path, epoch_id=epoch_id,
                                 accuracy=self.eval_acc)
+
+                if epochs_since_improvement >= early_stopping_patience and epoch_id > 10:
+                    logger.info(f"Early stopping triggered after {early_stopping_patience} epochs with no improvement.")
+                    break
+
+    
+        
+        # === Compose filename ===
+        model_name = self.configs.get("model", {}).get("name", "model")
+        max_epoch = self.configs.train_conf.max_epoch
+        trial_name = getattr(self, "trial_name", "default")
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        filename_prefix = f"{model_name}_ep{max_epoch}_{trial_name}_{timestamp}"
+        loss_curve_path = f"{filename_prefix}_loss_curve.png"
+        acc_curve_path = f"{filename_prefix}_accuracy_curve.png"
+        
+        # === Plotting ===
+        epochs = list(range(1, len(self.epoch_train_loss) + 1))
+        
+        plt.figure()
+        plt.plot(epochs, self.epoch_train_loss, label='Train Loss')
+        plt.plot(epochs, self.epoch_eval_loss, label='Eval Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Loss Curve')
+        plt.legend()
+        plt.savefig(loss_curve_path)
+        
+        plt.figure()
+        plt.plot(epochs, self.epoch_train_acc, label='Train Accuracy')
+        plt.plot(epochs, self.epoch_eval_acc, label='Eval Accuracy')
+        plt.xlabel('Epoch')
+        plt.ylabel('Accuracy')
+        plt.title('Accuracy Curve')
+        plt.legend()
+        plt.savefig(acc_curve_path)
+        
+        logger.info(f"Saved loss curve to {loss_curve_path}")
+        logger.info(f"Saved accuracy curve to {acc_curve_path}")
+
+
 
     def evaluate(self, resume_model=None, save_matrix_path=None):
         """
