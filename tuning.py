@@ -1,6 +1,8 @@
 import os
 import itertools
 import re
+import subprocess
+
 
 # Hyperparameters
 learning_rates = [0.01, 0.001, 0.0001]
@@ -51,7 +53,6 @@ for lr, bs, model, wd in combinations:
     command = f"{base_command} --overwrites \"{overwrite_str}\" > {log_file} 2>&1"
 
     print(f"\n🚀 Launching: {command}")
-    import subprocess
 
     try:
         subprocess.run(command, shell=True, check=True)
