@@ -1,8 +1,7 @@
-中性
-平静
-快乐
-悲伤
-愤怒
-恐惧
-厌恶
-惊讶
+Neutral
+Happy
+Sad
+Angry
+Fearful
+Disgusted
+Surprised

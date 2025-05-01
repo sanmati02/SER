@@ -54,7 +54,7 @@ model_conf:
 
   model_args:
     # Number of output classes; if null, automatically determined from label list
-    num_class: null
+    num_class: 7
 
 # Optimizer Parameters
 optimizer_conf:
