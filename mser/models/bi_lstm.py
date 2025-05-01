@@ -1,6 +1,5 @@
 import torch.nn as nn
 
-
 class BiLSTM(nn.Module):
     def __init__(self, input_size, num_class):
         super().__init__()
