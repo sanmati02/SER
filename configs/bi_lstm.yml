@@ -16,7 +16,7 @@ dataset_conf:
 
   dataLoader:
     # Batch size for training
-    batch_size: 64
+    batch_size: 16
     # Whether to drop the last incomplete batch
     drop_last: True
     # Number of worker threads for data loading

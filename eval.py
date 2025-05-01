@@ -21,6 +21,6 @@ trainer = MSERTrainer(configs=args.configs, use_gpu=args.use_gpu, overwrites=arg
 # Start evaluation
 start = time.time()
 loss, accuracy = trainer.evaluate(resume_model=args.resume_model,
-                                  save_matrix_path=args.save_matrix_path)
+                                  save_dir=args.save_matrix_path)
 end = time.time()
 print('Evaluation time: {}s, loss: {:.5f}, accuracy: {:.5f}'.format(int(end - start), loss, accuracy))

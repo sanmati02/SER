@@ -28,6 +28,17 @@ from mser.utils.checkpoint import load_pretrained, load_checkpoint, save_checkpo
 from mser.utils.utils import dict_to_object, plot_confusion_matrix, print_arguments, convert_string_based_on_type
 import matplotlib.pyplot as plt
 from datetime import datetime
+from sklearn.metrics import classification_report, confusion_matrix
+import pandas as pd, matplotlib.pyplot as plt, seaborn as sns, time, os, json
+import os, time, json, numpy as np, torch
+import pandas as pd
+import matplotlib.pyplot as plt, seaborn as sns
+from tqdm import tqdm
+from sklearn.metrics import confusion_matrix, classification_report
+
+import json, pathlib
+MAPPING_PATH = pathlib.Path('dataset/npy_to_wav.json')
+_npy2wav = json.load(MAPPING_PATH.open()) if MAPPING_PATH.exists() else {}
 
 
 class MSERTrainer(object):
@@ -154,6 +165,18 @@ class MSERTrainer(object):
                                       shuffle=False,
                                       **data_loader_args)
 
+    
+    
+    def _save_confusion(cm, labels, save_dir):
+        plt.figure(figsize=(6, 6))
+        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                    xticklabels=labels, yticklabels=labels)
+        plt.xlabel("Predicted"); plt.ylabel("True")
+        os.makedirs(save_dir, exist_ok=True)
+        fp = os.path.join(save_dir, f"confusion_{int(time.time())}.png")
+        plt.tight_layout(); plt.savefig(fp); plt.close()
+        print(f"✓ confusion matrix saved → {fp}")
+
 
     def get_standard_file(self, max_duration=100):
         self.audio_featurizer = AudioFeaturizer(feature_method=self.configs.preprocess_conf.feature_method,
@@ -167,7 +190,7 @@ class MSERTrainer(object):
                                      **dataset_args)
         data = []
         for i in tqdm(range(len(test_dataset))):
-            feature, _ = test_dataset[i]
+            feature = test_dataset[i][0]
             data.append(feature)
         scaler = StandardScaler().fit(data)
         joblib.dump(scaler, self.configs.dataset_conf.dataset.scaler_path)
@@ -199,7 +222,7 @@ class MSERTrainer(object):
             save_data_list = data_list.replace('.txt', '_features.txt')
             with open(save_data_list, 'w', encoding='utf-8') as f:
                 for i in tqdm(range(len(test_dataset))):
-                    feature, label = test_dataset[i]
+                    feature, label, *_ = test_dataset[i]
                     label = int(label)
                     save_path = os.path.join(save_dir, str(label), f'{int(time.time() * 1000)}.npy')
                     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -244,7 +267,11 @@ class MSERTrainer(object):
         train_times, accuracies, loss_sum = [], [], []
         start = time.time()
     
-        for batch_id, (features, label, input_lens_ratio) in enumerate(self.train_loader):
+        for batch_id, batch in enumerate(self.train_loader):
+            if len(batch)==3: 
+                features, label, input_lens_ratio = batch
+            else: 
+                features, label, input_lens_ratio, _ = batch
             if self.stop_train: break
             if nranks > 1:
                 features = features.to(local_rank)
@@ -368,7 +395,7 @@ class MSERTrainer(object):
         self.train_step = max(last_epoch, 0) * len(self.train_loader)
 
         epochs_since_improvement = 0
-        early_stopping_patience = 10
+        early_stopping_patience = 15
 
         for epoch_id in range(last_epoch, self.configs.train_conf.max_epoch):
             if self.stop_train: break
@@ -451,64 +478,198 @@ class MSERTrainer(object):
 
 
 
-    def evaluate(self, resume_model=None, save_matrix_path=None):
-        """
-        Evaluate the model
+    
 
-        :param resume_model: Model to use for evaluation
-        :param save_matrix_path: Path to save the confusion matrix
-        :return: Evaluation loss and accuracy
+    def evaluate(self,
+                 resume_model: str | None = None,
+                 save_dir:     str | None = None):
         """
+        Run evaluation and (optionally) write artefacts to disk.
+    
+        Parameters
+        ----------
+        resume_model : str | None
+            Path to a checkpoint directory or *.pth file to evaluate.
+        save_dir : str | None
+            Directory where confusion-matrix PNG, class report (JSON) and
+            mis-classification list (CSV) will be written.  If None, no files
+            are saved.
+    
+        Returns
+        -------
+        loss : float   Average cross-entropy loss over the test set.
+        acc  : float   Average accuracy  over the test set.
+        """
+    
+        # ------------------------------------------------------------------ #
+        # 1) House-keeping: dataloader, model, checkpoint                     #
+        # ------------------------------------------------------------------ #
         if self.test_loader is None:
             self.__setup_dataloader()
         if self.model is None:
-            self.__setup_model(input_size=self.test_dataset.audio_featurizer.feature_dim)
+            self.__setup_model(
+                input_size=self.test_dataset.audio_featurizer.feature_dim
+            )
+    
         if resume_model is not None:
-            if os.path.isdir(resume_model):
-                resume_model = os.path.join(resume_model, 'model.pth')
-            assert os.path.exists(resume_model), f"{resume_model} Model does not exist!"
-            model_state_dict = torch.load(resume_model, weights_only=False)
-            self.model.load_state_dict(model_state_dict, strict=False)
-            logger.info(f'Successfully loaded model: {resume_model}')
+            ckpt = resume_model
+            if os.path.isdir(ckpt):
+                ckpt = os.path.join(ckpt, "model.pth")
+            assert os.path.exists(ckpt), f"{ckpt} does not exist!"
+            self.model.load_state_dict(torch.load(ckpt, weights_only=False),
+                                       strict=False)
+            logger.info(f"✓ loaded checkpoint {ckpt}")
+    
         self.model.eval()
-        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-            eval_model = self.model.module
-        else:
-            eval_model = self.model
+        eval_model = self.model.module if isinstance(
+            self.model, torch.nn.parallel.DistributedDataParallel) else self.model
+    
+        # ------------------------------------------------------------------ #
+        # 2) Evaluation loop                                                 #
+        # ------------------------------------------------------------------ #
+        losses, accs, all_lbls, all_preds, wrong = [], [], [], [], []
+        # --------------------------------------------------------------------- #
+#  Meta-data parser that never crashes                                  #
+# --------------------------------------------------------------------- #
+        def _parse_meta(path: str) -> dict:
+            """
+            Return a meta-data dict for common SER corpora.
+            Works for:
+              • RAVDESS   03-01-02-01-01-01-12.wav
+              • CREMA-D   1043_DFA_ANG_XX.wav
+              • TESS      OAF_angry_neutral_0013.wav
+              • SAVEE     DC_angry.wav
+            Anything else → empty dict.
+            """
+            name = os.path.basename(path)
+            stem = os.path.splitext(name)[0]
+        
+            # -------- RAVDESS --------------------------------------------------
+            if '-' in stem and len(stem.split('-')) == 7:
+                t = stem.split('-')
+                return dict(
+                    corpus    = 'RAVDESS',
+                    modality  = int(t[0]),
+                    channel   = int(t[1]),
+                    emotion   = int(t[2]),
+                    intensity = int(t[3]),
+                    statement = int(t[4]),
+                    repetition= int(t[5]),
+                    actor     = int(t[6]),
+                )
+        
+            # -------- CREMA-D --------------------------------------------------
+            # 1043_DFA_ANG_XX → [ID]_[sentence]_ANG_[take]
+            if '_' in stem and stem.split('_')[2] in {'ANG','DIS','FEA','HAP','NEU','SAD'}:
+                id_, utt, emo, _ = stem.split('_', 3)
+                return dict(
+                    corpus    = 'CREMA-D',
+                    speaker   = int(id_),
+                    sentence  = utt,
+                    emotion   = emo,
+                )
+        
+            # -------- TESS -----------------------------------------------------
+            # OAF_angry_neutral_0013
+            if stem.startswith(('OAF', 'YAF')) and '_' in stem:
+                who, emo, _, idx = stem.split('_')
+                return dict(
+                    corpus  = 'TESS',
+                    actor   = who,
+                    emotion = emo,
+                    index   = int(idx),
+                )
+        
+            # -------- SAVEE ----------------------------------------------------
+            # DC_angry
+            if stem.endswith(('angry','disgust','fear','happy','neutral','sad','surprise')):
+                speaker, emo = stem.split('_')
+                return dict(
+                    corpus  = 'SAVEE',
+                    actor   = speaker,
+                    emotion = emo,
+                )
+        
+            # -------- unknown --------------------------------------------------
+            return {}
 
-        accuracies, losses, preds, labels = [], [], [], []
+    
         with torch.no_grad():
-            for batch_id, (features, label, input_lens_ratio) in enumerate(tqdm(self.test_loader, desc='Perform Evaluation')):
-                if self.stop_eval: break
+            for batch in tqdm(self.test_loader, desc="Eval"):
+                # Accept either 3- or 4-tuple batches
+                features, label, *rest = batch                    # rest = [len] OR [len, path]
+                input_lens_ratio = rest[0]
+                paths = rest[1] if len(rest) == 2 else None       # None if dataloader doesn't send paths
+    
                 features = features.to(self.device)
-                label = label.to(self.device).long()
+                label    = label.to(self.device).long()
+    
                 output = eval_model(features)
-                los = self.loss(output, label)
-
+                loss   = self.loss(output, label)
+                losses.append(loss.item())
+    
                 acc = accuracy(output, label)
-                accuracies.append(acc)
-
-                label = label.data.cpu().numpy()
-                output = output.data.cpu().numpy()
-                pred = np.argmax(output, axis=1)
-                preds.extend(pred.tolist())
-
-                labels.extend(label.tolist())
-                los1 = los.data.cpu().numpy()
-                if not np.isnan(los1):
-                    losses.append(los1)
-        loss = float(sum(losses) / len(losses)) if len(losses) > 0 else -1
-        acc = float(sum(accuracies) / len(accuracies)) if len(accuracies) > 0 else -1
-
-        if save_matrix_path is not None:
-            try:
-                cm = confusion_matrix(labels, preds)
-                plot_confusion_matrix(cm=cm, save_path=os.path.join(save_matrix_path, f'{int(time.time())}.png'),
-                                      class_labels=self.class_labels)
-            except Exception as e:
-                logger.error(f'Failed to save confusion matrix: {e}')
+                accs.append(acc)
+    
+                probs = output.softmax(dim=1).cpu().numpy()   # or just output
+                preds = probs.argmax(axis=1)
+                lbls  = label.cpu().numpy()
+    
+                all_preds.extend(preds.tolist())
+                all_lbls.extend(lbls.tolist())
+    
+                # collect mis-predictions if we have file paths
+                if paths is not None:
+                    for p, t, path in zip(preds, lbls, paths):
+                        if p != t:
+                            wav_path = _npy2wav.get(path, path)   # fall back to itself if missing
+                            wrong.append({
+                                'path': path,      # the .npy (kept for debugging)
+                                'wav':  wav_path,  # original RAVDESS name if available
+                                'true': int(t),
+                                'pred': int(p),
+                                **_parse_meta(wav_path)   # actor, intensity, etc.
+                            })
+    
+        # ------------------------------------------------------------------ #
+        # 3) Metrics                                                         #
+        # ------------------------------------------------------------------ #
+        avg_loss = float(np.mean(losses)) if losses else -1
+        avg_acc  = float(np.mean(accs))   if accs  else -1
+    
+        # ------------------------------------------------------------------ #
+        # 4) Artefacts (optional)                                            #
+        # ------------------------------------------------------------------ #
+        if save_dir is not None:
+            os.makedirs(save_dir, exist_ok=True)
+    
+            # 4-a Confusion matrix PNG
+            cm = confusion_matrix(all_lbls, all_preds)
+            plt.figure(figsize=(6, 6))
+            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                        xticklabels=self.class_labels,
+                        yticklabels=self.class_labels)
+            plt.xlabel("Predicted"); plt.ylabel("True")
+            fname = os.path.join(save_dir, f"confusion_{int(time.time())}.png")
+            plt.tight_layout(); plt.savefig(fname); plt.close()
+            logger.info(f"✓ confusion matrix saved → {fname}")
+    
+            # 4-b Per-class precision / recall / F1
+            report = classification_report(all_lbls, all_preds,
+                                           target_names=self.class_labels,
+                                           output_dict=True)
+            with open(os.path.join(save_dir, "class_report.json"), "w") as fp:
+                json.dump(report, fp, indent=2)
+    
+            # 4-c CSV of mistakes
+            if wrong:
+                pd.DataFrame(wrong).to_csv(
+                    os.path.join(save_dir, "misclassified.csv"), index=False)
+                logger.info(f"✓ {len(wrong)} mis-classified samples written")
+    
+        # reset to train mode for further training
         self.model.train()
-        return loss, acc
+        return avg_loss, avg_acc
 
     def export(self, save_model_path='models/', resume_model='models/BiLSTM_Emotion2Vec/best_model/'):
         """

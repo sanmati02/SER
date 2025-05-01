@@ -106,7 +106,7 @@ class CustomDataset(Dataset):
             feature = self.scaler.transform([feature])
             feature = feature.squeeze().astype(np.float32)
 
-        return np.array(feature, dtype=np.float32), np.array(int(label), dtype=np.int64)
+        return (np.array(feature, dtype=np.float32), np.array(int(label), dtype=np.int64), data_path)
 
     def __len__(self):
         return len(self.lines)
