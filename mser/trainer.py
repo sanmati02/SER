@@ -244,7 +244,23 @@ class MSERTrainer(object):
         self.model = build_model(input_size=input_size, configs=self.configs)
         self.model.to(self.device)
         if self.log_level == "DEBUG" or self.log_level == "INFO":
-            summary(self.model, input_size=(1, self.test_dataset.audio_featurizer.feature_dim))
+            # summary(self.model, input_size=(1, self.test_dataset.audio_featurizer.feature_dim))
+            example_input = self.test_dataset[0][0]  # (T, F) or (F,)
+        
+            # Auto-handle case: shape is [T, F] for LSTM, or [F] for MLP
+           
+            if example_input.ndim == 2:
+                
+                seq_len, feat_dim = example_input.shape
+                input_shape = (1, seq_len, feat_dim)  # [B, T, F]
+            elif example_input.ndim == 1:
+                feat_dim = example_input.shape[0]
+                input_shape = (1, feat_dim)  # [B, F]
+            else:
+                raise ValueError(f"Unexpected input shape: {example_input.shape}")
+        
+            print(f"[Summary] Using input shape: {input_shape}")
+            summary(self.model, input_size=input_shape)
 
         label_smoothing = self.configs.train_conf.get('label_smoothing', 0.0)
         self.loss = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
@@ -282,8 +298,11 @@ class MSERTrainer(object):
     
             with torch.autocast('cuda', enabled=self.configs.train_conf.enable_amp):
                 output = self.model(features)
-    
-            los = self.loss(output, label)
+
+            logits = output[0] if isinstance(output, tuple) else output
+
+
+            los = self.loss(logits, label)
     
             if self.configs.train_conf.enable_amp:
                 scaled = self.amp_scaler.scale(los)
@@ -395,7 +414,7 @@ class MSERTrainer(object):
         self.train_step = max(last_epoch, 0) * len(self.train_loader)
 
         epochs_since_improvement = 0
-        early_stopping_patience = 15
+        early_stopping_patience = 20
 
         for epoch_id in range(last_epoch, self.configs.train_conf.max_epoch):
             if self.stop_train: break
@@ -476,6 +495,40 @@ class MSERTrainer(object):
         logger.info(f"Saved loss curve to {loss_curve_path}")
         logger.info(f"Saved accuracy curve to {acc_curve_path}")
 
+
+    def attention_vis(self, output, paths):
+        save_dir = 'output/images/'
+        if isinstance(output, tuple) and len(output) > 1:
+            attention_weights = output[1]  # [B, T]
+            attention_weights = attention_weights.detach().cpu().numpy()
+    
+            if save_dir is not None:
+                attn_dir = os.path.join(save_dir, "attention_weights_seq_stacked")
+                os.makedirs(attn_dir, exist_ok=True)
+    
+                for i, (weights, path) in enumerate(zip(attention_weights, paths)):
+                    # Ensure weights is a 1D array
+                    weights = np.array(weights).flatten()
+                    basename = os.path.splitext(os.path.basename(path))[0]
+    
+                    # Line plot
+                    plt.figure(figsize=(10, 2))
+                    plt.plot(weights, color='navy')
+                    plt.title(f"Temporal Attention – {basename}")
+                    plt.xlabel("Timestep")
+                    plt.ylabel("Attention Weight")
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(attn_dir, f"{basename}_temporal_attn_line.png"))
+                    plt.close()
+    
+                    # Heatmap (optional, remove if too much)
+                    plt.figure(figsize=(6, 1))
+                    sns.heatmap(weights[np.newaxis, :], cmap="Blues", cbar=True)
+                    plt.title(f"Temporal Attention Heatmap – {basename}")
+                    plt.xlabel("Timestep")
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(attn_dir, f"{basename}_temporal_attn_heatmap.png"))
+                    plt.close()
 
 
     
@@ -605,12 +658,16 @@ class MSERTrainer(object):
                 label    = label.to(self.device).long()
     
                 output = eval_model(features)
-                loss   = self.loss(output, label)
+                logits = output[0] if isinstance(output, tuple) else output
+                self.attention_vis(output, paths)
+                loss   = self.loss(logits, label)
                 losses.append(loss.item())
     
                 acc = accuracy(output, label)
                 accs.append(acc)
-    
+
+                if isinstance(output, tuple):
+                    output = output[0]
                 probs = output.softmax(dim=1).cpu().numpy()   # or just output
                 preds = probs.argmax(axis=1)
                 lbls  = label.cpu().numpy()
@@ -658,13 +715,13 @@ class MSERTrainer(object):
             report = classification_report(all_lbls, all_preds,
                                            target_names=self.class_labels,
                                            output_dict=True)
-            with open(os.path.join(save_dir, "class_report.json"), "w") as fp:
+            with open(os.path.join(save_dir, "class_report_stacked_attention.json"), "w") as fp:
                 json.dump(report, fp, indent=2)
     
             # 4-c CSV of mistakes
             if wrong:
                 pd.DataFrame(wrong).to_csv(
-                    os.path.join(save_dir, "misclassified.csv"), index=False)
+                    os.path.join(save_dir, "misclassified_stacked_attention.csv"), index=False)
                 logger.info(f"✓ {len(wrong)} mis-classified samples written")
     
         # reset to train mode for further training
