@@ -658,13 +658,13 @@ class MSERTrainer(object):
             report = classification_report(all_lbls, all_preds,
                                            target_names=self.class_labels,
                                            output_dict=True)
-            with open(os.path.join(save_dir, "class_report.json"), "w") as fp:
+            with open(os.path.join(save_dir, "class_report_stacked.json"), "w") as fp:
                 json.dump(report, fp, indent=2)
     
             # 4-c CSV of mistakes
             if wrong:
                 pd.DataFrame(wrong).to_csv(
-                    os.path.join(save_dir, "misclassified.csv"), index=False)
+                    os.path.join(save_dir, "misclassified_stacked.csv"), index=False)
                 logger.info(f"✓ {len(wrong)} mis-classified samples written")
     
         # reset to train mode for further training
