@@ -1,0 +1,3 @@
+[submodule "MELD"]
+	path = MELD
+	url = git@github.com:declare-lab/MELD.git
