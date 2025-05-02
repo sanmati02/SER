@@ -21,20 +21,13 @@ dataset_conf:
     drop_last: True
     # Number of worker threads for data loading
     num_workers: 4
-<<<<<<< HEAD
-
+    
   # Path to training data list
   train_list: 'dataset/train_list_features.txt'
   # Path to testing data list
   test_list: 'dataset/test_list_features.txt'
   # Path to label list
-=======
-  # 训练数据的数据列表路径
-  train_list: 'dataset/train_list.txt'
-  # 测试数据的数据列表路径
-  test_list: 'dataset/test_list.txt'
-  # 标签列表
->>>>>>> f63ede02f789010f281c3089ade73c842b992847
+
   label_list_path: 'dataset/label_list.txt'
 
   # Special evaluation settings
@@ -56,14 +49,9 @@ preprocess_conf:
 
 # Model Parameters
 model_conf:
-<<<<<<< HEAD
   # Model to use
   model: 'BiLSTM'
-=======
-  # 所使用的模型
-  model: 'BiLSTM' #'BiLSTM'
-  # 模型参数
->>>>>>> f63ede02f789010f281c3089ade73c842b992847
+
   model_args:
     # Number of output classes; if null, automatically determined from label list
     num_class: null
@@ -97,6 +85,6 @@ train_conf:
   # Label smoothing value for CrossEntropyLoss
   label_smoothing: 0.0
   # Maximum number of training epochs
-  max_epoch: 60
+  max_epoch: 100
   # Log training status every N iterations
   log_interval: 10
