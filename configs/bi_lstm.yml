@@ -50,7 +50,7 @@ preprocess_conf:
 # Model Parameters
 model_conf:
   # Model to use
-  model: 'BiLSTM'
+  model: 'LSTMAdditiveAttention'
 
   model_args:
     # Number of output classes; if null, automatically determined from label list

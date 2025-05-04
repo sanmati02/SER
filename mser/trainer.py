@@ -673,7 +673,6 @@ class MSERTrainer(object):
                 features, label, *rest = batch                    # rest = [len] OR [len, path]
                 input_lens_ratio = rest[0]
                 paths = rest[1] if len(rest) == 2 else None       # None if dataloader doesn't send paths
-    
                 features = features.to(self.device)
                 label    = label.to(self.device).long()
     
