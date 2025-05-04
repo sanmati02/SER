@@ -28,7 +28,9 @@ def get_data_list(audio_path, list_path):
 
 
 def create_ravdess_list(audio_dir, list_path):
-    labels = ["Neutral", "Calm", "Happy", "Sad", "Angry", "Fearful", "Disgusted", "Surprised"]
+    # labels = ["Neutral", "Calm", "Happy", "Sad", "Angry", "Fearful", "Disgusted", "Surprised"]
+    labels = ["Neutral", "Happy", "Sad", "Angry", "Fearful", "Disgusted", "Surprised"]
+
     with open(os.path.join(list_path, 'label_list.txt'), 'w', encoding='utf-8') as f:
         for label in labels:
             f.write(f'{label}\n')
@@ -38,11 +40,23 @@ def create_ravdess_list(audio_dir, list_path):
         actor_dir = os.path.join(audio_dir, d)
         for file in os.listdir(actor_dir):
             path = os.path.join(actor_dir, file)
-            emotion_id = int(file.split('-')[2]) - 1
-            if emotion_id not in data_list.keys():
-                data_list[emotion_id] = [path]
-            else:
-                data_list[emotion_id].append(path)
+            
+            code = int(file.split('-')[2]) 
+
+            if code == 2: 
+                    continue
+            if code > 2: 
+                emotion_id = code-2
+
+            else: 
+                emotion_id = code -1
+            
+            # if emotion_id not in data_list.keys():
+            #     data_list[emotion_id] = [path]
+            # else:
+            #     data_list[emotion_id].append(path)
+            data_list.setdefault(emotion_id, []).append(path)
+
 
     f_train = open(os.path.join(list_path, 'train_list.txt'), 'w', encoding='utf-8')
     f_test = open(os.path.join(list_path, 'test_list.txt'), 'w', encoding='utf-8')

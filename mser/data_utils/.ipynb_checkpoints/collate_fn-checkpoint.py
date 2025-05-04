@@ -45,7 +45,6 @@ def collate_fn(batch):
         feat_dim = batch[0][0].shape[1]
         inputs = np.zeros((batch_size, max_seq_len, feat_dim), dtype='float32')
 
-
         for i, (tensor, label, path) in enumerate(batch):
             seq_len = tensor.shape[0]
             inputs[i, :seq_len, :] = tensor

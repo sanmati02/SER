@@ -16,7 +16,7 @@ dataset_conf:
 
   dataLoader:
     # Batch size for training
-    batch_size: 64
+    batch_size: 16
     # Whether to drop the last incomplete batch
     drop_last: True
     # Number of worker threads for data loading
@@ -54,7 +54,7 @@ model_conf:
 
   model_args:
     # Number of output classes; if null, automatically determined from label list
-    num_class: null
+    num_class: 7
 
 # Optimizer Parameters
 optimizer_conf:
@@ -85,6 +85,6 @@ train_conf:
   # Label smoothing value for CrossEntropyLoss
   label_smoothing: 0.0
   # Maximum number of training epochs
-  max_epoch: 100
+  max_epoch: 300
   # Log training status every N iterations
   log_interval: 10

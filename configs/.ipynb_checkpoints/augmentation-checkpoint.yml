@@ -1,0 +1,31 @@
+# Speed Augmentation
+speed:
+  # Probability of applying augmentation
+  prob: 1.0
+
+# Volume Augmentation
+volume:
+  # Probability of applying augmentation
+  prob: 0.0
+  # Minimum gain in dBFS
+  min_gain_dBFS: -15
+  # Maximum gain in dBFS
+  max_gain_dBFS: 15
+
+# Noise Augmentation
+noise:
+  # Probability of applying augmentation
+  prob: 0.0
+  # Directory containing noise files for augmentation
+  noise_dir: 'dataset/noise'
+  # Minimum signal-to-noise ratio (SNR) in dB
+  min_snr_dB: 10
+  # Maximum signal-to-noise ratio (SNR) in dB
+  max_snr_dB: 50
+
+# Reverberation Augmentation
+reverb:
+  # Probability of applying augmentation
+  prob: 0.0
+  # Directory containing reverberation files for augmentation
+  reverb_dir: 'dataset/reverb'

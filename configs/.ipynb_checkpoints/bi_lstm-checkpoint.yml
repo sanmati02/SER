@@ -1,80 +1,90 @@
 # Dataset Parameters
 dataset_conf:
   dataset:
-    # Minimum audio length to keep (shorter ones are filtered out)
+    # Minimum audio duration (seconds); shorter samples are filtered out
     min_duration: 0.4
-    # Maximum audio length (longer ones will be trimmed)
+    # Maximum audio duration (seconds); longer samples are truncated
     max_duration: 3
-    # Audio sampling rate
+    # Audio sampling rate (Hz)
     sample_rate: 16000
     # Whether to apply volume normalization
     use_dB_normalization: True
     # Target dB value for volume normalization
     target_dB: -20
-    # Path to the normalization scaler file
+    # Path to normalization scaler file
     scaler_path: 'dataset/standard.m'
+
   dataLoader:
     # Batch size for training
-    batch_size: 64
+    batch_size: 16
     # Whether to drop the last incomplete batch
     drop_last: True
-    # Number of threads for data loading
+    # Number of worker threads for data loading
     num_workers: 4
-  # Path to the training data list
+    
+  # Path to training data list
   train_list: 'dataset/train_list_features.txt'
-  # Path to the testing data list
+  # Path to testing data list
   test_list: 'dataset/test_list_features.txt'
-  # Path to the label list
+  # Path to label list
+
   label_list_path: 'dataset/label_list.txt'
-  # Special settings for evaluation
+
+  # Special evaluation settings
   eval_conf:
     # Batch size for evaluation
     batch_size: 1
-    # Maximum audio length allowed during evaluation
+    # Maximum audio duration allowed during evaluation (seconds)
     max_duration: 5
 
 # Data Preprocessing Parameters
 preprocess_conf:
-  # Feature extraction method (supported: CustomFeature, Emotion2Vec)
+  # Audio feature extraction method (supported: CustomFeature, Emotion2Vec)
   feature_method: 'CustomFeature'
   method_args:
+    # Feature extraction granularity
     granularity: 'utterance'
+    # Type of features to extract
     feature_type: 'mfcc'
 
 # Model Parameters
 model_conf:
-  # Model to be used
-  model: 'BiLSTM'
-  # Model-specific parameters
+  # Model to use
+  model: 'StackedLSTMAdditiveAttention'
+
   model_args:
-    # Number of classes; if null, automatically determined from the label list
-    num_class: null
+    # Number of output classes; if null, automatically determined from label list
+    num_class: 7
 
 # Optimizer Parameters
 optimizer_conf:
-  # Optimizer to use
+  # Optimization method
   optimizer: 'Adam'
-  # Optimizer-specific parameters
   optimizer_args:
+    # Learning rate
     lr: 0.001
+    # Weight decay (regularization)
     weight_decay: !!float 1e-5
-  # Learning rate scheduler (supports PyTorch built-ins and custom WarmupCosineSchedulerLR)
+
+  # Learning rate scheduler (supports both PyTorch schedulers and WarmupCosineSchedulerLR)
   scheduler: 'WarmupCosineSchedulerLR'
-  # Scheduler-specific parameters
   scheduler_args:
+    # Minimum learning rate
     min_lr: !!float 1e-5
+    # Maximum learning rate
     max_lr: 0.001
+    # Number of warm-up epochs
     warmup_epoch: 5
 
 # Training Parameters
 train_conf:
-  # Whether to enable automatic mixed precision (AMP)
+  # Enable Automatic Mixed Precision (AMP)
   enable_amp: False
-  # Whether to use the PyTorch 2.0 compiler
+  # Use PyTorch 2.0 compilation for optimization
   use_compile: False
-  # Label smoothing parameter for CrossEntropyLoss
+  # Label smoothing value for CrossEntropyLoss
   label_smoothing: 0.0
-  # Number of training epochs
-  max_epoch: 60
-  # Interval (in steps) at which to log training information
+  # Maximum number of training epochs
+  max_epoch: 100
+  # Log training status every N iterations
   log_interval: 10
