@@ -493,40 +493,59 @@ class MSERTrainer(object):
         logger.info(f"Saved loss curve to {loss_curve_path}")
         logger.info(f"Saved accuracy curve to {acc_curve_path}")
 
+    def summarize_attention(self,attention_outputs, save_dir='analysis/'):
+    
 
-    def attention_vis(self, output, paths):
-        save_dir = 'output/images/'
-        if isinstance(output, tuple) and len(output) > 1:
-            attention_weights = output[1]  # [B, T]
-            attention_weights = attention_weights.detach().cpu().numpy()
+        os.makedirs(save_dir, exist_ok=True)
     
-            if save_dir is not None:
-                attn_dir = os.path.join(save_dir, "attention_weights_seq_single")
-                os.makedirs(attn_dir, exist_ok=True)
+        all_weights = []
+        max_len = 0
     
-                for i, (weights, path) in enumerate(zip(attention_weights, paths)):
-                    # Ensure weights is a 1D array
-                    weights = np.array(weights).flatten()
-                    basename = os.path.splitext(os.path.basename(path))[0]
+        # Step 1: Extract attention weights and find max length
+        for output in attention_outputs:
+            weights = output[1].detach().cpu().numpy()  # [B, T]
+            for w in weights:
+                max_len = max(max_len, len(w))
+                all_weights.append(w)
     
-                    # Line plot
-                    plt.figure(figsize=(10, 2))
-                    plt.plot(weights, color='navy')
-                    plt.title(f"Temporal Attention – {basename}")
-                    plt.xlabel("Timestep")
-                    plt.ylabel("Attention Weight")
-                    plt.tight_layout()
-                    plt.savefig(os.path.join(attn_dir, f"{basename}_temporal_attn_line.png"))
-                    plt.close()
+        # Step 2: Pad all to max_len
+        padded_weights = []
+        for w in all_weights:
+            if len(w) < max_len:
+                w = np.pad(w, (0, max_len - len(w)), mode='constant')
+            padded_weights.append(w)
     
-                    # Heatmap (optional, remove if too much)
-                    plt.figure(figsize=(6, 1))
-                    sns.heatmap(weights[np.newaxis, :], cmap="Blues", cbar=True)
-                    plt.title(f"Temporal Attention Heatmap – {basename}")
-                    plt.xlabel("Timestep")
-                    plt.tight_layout()
-                    plt.savefig(os.path.join(attn_dir, f"{basename}_temporal_attn_heatmap.png"))
-                    plt.close()
+        all_weights = np.stack(padded_weights)  # [N, T]
+    
+        # Step 3: Plot mean ± std
+        mean_weights = np.mean(all_weights, axis=0)
+        std_weights = np.std(all_weights, axis=0)
+    
+        plt.figure(figsize=(10, 4))
+        plt.plot(mean_weights, label='Mean Attention', color='navy')
+        plt.fill_between(np.arange(max_len),
+                         mean_weights - std_weights,
+                         mean_weights + std_weights,
+                         alpha=0.3, label='±1 Std', color='skyblue')
+        plt.title("Average Attention Across Samples")
+        plt.xlabel("Timestep")
+        plt.ylabel("Attention Weight")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, "attention_mean_std.png"))
+        plt.close()
+    
+        # Step 4: Heatmap of all samples
+        plt.figure(figsize=(12, 6))
+        sns.heatmap(all_weights, cmap='Blues', cbar=True)
+        plt.title("Attention Weights Heatmap Across Samples")
+        plt.xlabel("Timestep")
+        plt.ylabel("Sample Index")
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, "attention_heatmap_all.png"))
+        plt.close()
+    
+
 
 
     
@@ -646,6 +665,9 @@ class MSERTrainer(object):
 
     
         with torch.no_grad():
+            
+            attention_outputs = []
+
             for batch in tqdm(self.test_loader, desc="Eval"):
                 # Accept either 3- or 4-tuple batches
                 features, label, *rest = batch                    # rest = [len] OR [len, path]
@@ -656,9 +678,12 @@ class MSERTrainer(object):
                 label    = label.to(self.device).long()
     
                 output = eval_model(features)
-                logits = output[0] if isinstance(output, tuple) else output
-                self.attention_vis(output, paths)
-                loss   = self.loss(logits, label)
+                # logits = output[0] if isinstance(output, tuple) else output
+                if isinstance(output, tuple):
+                    attention_outputs.append(output)  # <-- Collect for summary
+                    output = output[0]
+                # self.attention_vis(output, paths)
+                loss   = self.loss(output, label)
                 losses.append(loss.item())
     
                 acc = accuracy(output, label)
@@ -685,6 +710,11 @@ class MSERTrainer(object):
                                 'pred': int(p),
                                 **_parse_meta(wav_path)   # actor, intensity, etc.
                             })
+
+
+        if self.configs.model_conf.model == 'LSTMAdditiveAttention' or self.configs.model_conf.model == 'StackedLSTMAdditiveAttention':
+            self.summarize_attention(attention_outputs, save_dir=f'analysis/summary_attention_{self.configs.model_conf.model}')
+
     
         # ------------------------------------------------------------------ #
         # 3) Metrics                                                         #
@@ -699,27 +729,36 @@ class MSERTrainer(object):
             os.makedirs(save_dir, exist_ok=True)
     
             # 4-a Confusion matrix PNG
-            cm = confusion_matrix(all_lbls, all_preds)
-            plt.figure(figsize=(6, 6))
-            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            cm = confusion_matrix(all_lbls, all_preds, labels=list(range(len(self.class_labels))))
+            cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
+            
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(cm_percent, annot=True, fmt=".2f", cmap="Reds",
                         xticklabels=self.class_labels,
-                        yticklabels=self.class_labels)
-            plt.xlabel("Predicted"); plt.ylabel("True")
-            fname = os.path.join(save_dir, f"confusion_{int(time.time())}.png")
-            plt.tight_layout(); plt.savefig(fname); plt.close()
-            logger.info(f"✓ confusion matrix saved → {fname}")
+                        yticklabels=self.class_labels,
+                        cbar_kws={'label': 'Percentage (%)'}, vmin=0, vmax=100)
+            plt.title("Confusion Matrix Heatmap (Percentages)")
+            plt.xlabel("Predicted Emotion")
+            plt.ylabel("True Emotion")
+            plt.tight_layout()
+            
+            os.makedirs(save_dir, exist_ok=True)
+            fname = os.path.join(save_dir, f"confusion_{self.configs.model_conf.model}.png")
+            plt.savefig(fname)
+            plt.close()
+            logger.info(f"✓ confusion matrix (percentage) saved → {fname}")
     
             # 4-b Per-class precision / recall / F1
             report = classification_report(all_lbls, all_preds,
                                            target_names=self.class_labels,
                                            output_dict=True)
-            with open(os.path.join(save_dir, "class_report_single_attention.json"), "w") as fp:
+            with open(os.path.join(save_dir, f"class_report_{self.configs.model_conf.model}.json"), "w") as fp:
                 json.dump(report, fp, indent=2)
     
             # 4-c CSV of mistakes
             if wrong:
                 pd.DataFrame(wrong).to_csv(
-                    os.path.join(save_dir, "misclassified_single_attention.csv"), index=False)
+                    os.path.join(save_dir, f"misclassified_{self.configs.model_conf.model}.csv"), index=False)
                 logger.info(f"✓ {len(wrong)} mis-classified samples written")
     
         # reset to train mode for further training

@@ -174,23 +174,26 @@ class LSTMAdditiveAttention(nn.Module):
 class StackedLSTMAdditiveAttention(nn.Module):
     def __init__(self, input_size, num_class):
         super().__init__()
-        self.fc0 = nn.Linear(input_size, 512)
-        self.lstm = nn.LSTM(input_size=512, hidden_size=256, num_layers=2,
-                            batch_first=True, bidirectional=True)
+        self.lstm = nn.LSTM(
+            input_size=201,   # ← use raw input size, e.g., 201
+            hidden_size=256,
+            num_layers=2,
+            batch_first=True,
+            bidirectional=True
+        )
         self.attn = TemporalAdditiveAttention(hidden_dim=512)  # 256*2 for bidirectional
         self.dropout = nn.Dropout(0.5)
         self.fc1 = nn.Linear(512, 256)
         self.relu1 = nn.ReLU()
         self.fc2 = nn.Linear(256, num_class)
 
-    def forward(self, x):
-        # x: [B, T, F] — already faked or real sequence
-        x = self.fc0(x)                     # [B, T, 512]
-        lstm_out, _ = self.lstm(x)          # [B, T, 512]
-        context, attn_weights = self.attn(lstm_out)  # [B, 512], [B, T]
-        x = self.dropout(context)           # [B, 512]
-        x = self.fc1(x)                     # [B, 256]
+    def forward(self, x):  # x: [B, T, F]
+        lstm_out, _ = self.lstm(x)                     # [B, T, 512]
+        context, attn_weights = self.attn(lstm_out)    # [B, 512], [B, T]
+        x = self.dropout(context)
+        x = self.fc1(x)
         x = self.relu1(x)
-        x = self.fc2(x)                     # [B, num_class]
+        x = self.fc2(x)
         return x, attn_weights
+
 
