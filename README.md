@@ -23,3 +23,7 @@ add_arg('resume_model',     str,   'models/BiLSTM_CustomFeature/best_model/',  "
 
 
 8. python eval.py --configs=configs/bi_lstm.yml
+
+if you run the StackedLSTMAttention model: 
+1. change BiLSTM to StackedLSTMAdditiveAttention in config/bi_lstm
+2. change eval.py to the following path which holds the best_model from drive: models/StackedLSTMAdditiveAttention_CustomFeature/best_model/
