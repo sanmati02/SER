@@ -3,54 +3,47 @@ import torch
 
 
 
-
-class FeatureAdditiveAttention(nn.Module):
-    def __init__(self, feature_dim):
-        super().__init__()
-        self.W = nn.Linear(feature_dim, feature_dim)
-        self.v = nn.Linear(feature_dim, feature_dim)
-
-    def forward(self, x):  # x: [B, F]
-        x_proj = torch.tanh(self.W(x))           # [B, F]
-        scores = self.v(x_proj)                  # [B, F]
-        weights = torch.softmax(scores, dim=1)   # [B, F]
-        context = x * weights                    # [B, F]
-        return context, weights
-
-
-# import torch
-# import torch.nn as nn
-
-# class TemporalAdditiveAttention(nn.Module):
-#     def __init__(self, hidden_dim):
+# class BiLSTM(nn.Module):
+#     def __init__(self, input_size, num_class):
 #         super().__init__()
-#         self.W = nn.Linear(hidden_dim, hidden_dim)
-#         self.v = nn.Linear(hidden_dim, 1)
+#         self.fc0 = nn.Linear(in_features=201, out_features=512)
+#         self.lstm = nn.LSTM(input_size=512, hidden_size=256, bidirectional=True)
+#         self.tanh = nn.Tanh()
+#         self.dropout = nn.Dropout(p=0.5)
+#         self.fc1 = nn.Linear(in_features=256, out_features=256)
+#         self.relu1 = nn.ReLU()
+#         self.fc2 = nn.Linear(in_features=256, out_features=num_class)
 
-#     def forward(self, lstm_out):  # [B, T, H]
-#         scores = self.v(torch.tanh(self.W(lstm_out)))  # [B, T, 1]
-#         weights = torch.softmax(scores, dim=1)         # [B, T, 1]
-#         context = torch.sum(weights * lstm_out, dim=1) # [B, H]
-#         return context, weights.squeeze(-1)            # [B, H], [B, T]
-
-
+#     def forward(self, x):
+#         x = self.fc0(x)
+#         x = x.unsqueeze(dim=1)
+#         y, (h, c) = self.lstm(x)
+#         x = y.squeeze(axis=1)
+#         x = self.tanh(x)
+#         x = self.dropout(x)
+#         x = self.fc1(x)
+#         x = self.relu1(x)
+#         x = self.fc2(x)
+#         return x
 
 class BiLSTM(nn.Module):
     def __init__(self, input_size, num_class):
         super().__init__()
-        self.fc0 = nn.Linear(in_features=input_size, out_features=512)
-        self.lstm = nn.LSTM(input_size=512, hidden_size=256, bidirectional=False)
+        self.lstm = nn.LSTM(
+            input_size=201,  # Directly use raw feature dim, e.g., 201
+            hidden_size=256,
+            bidirectional=True,
+            batch_first=True
+        )
         self.tanh = nn.Tanh()
-        self.dropout = nn.Dropout(p=0.5)
-        self.fc1 = nn.Linear(in_features=256, out_features=256)
+        self.dropout = nn.Dropout(p=0.3)
+        self.fc1 = nn.Linear(in_features=512, out_features=256)  # 256 * 2 for bidirectional
         self.relu1 = nn.ReLU()
         self.fc2 = nn.Linear(in_features=256, out_features=num_class)
 
-    def forward(self, x):
-        x = self.fc0(x)
-        x = x.unsqueeze(dim=1)
-        y, (h, c) = self.lstm(x)
-        x = y.squeeze(axis=1)
+    def forward(self, x):  # x: [B, T, F]
+        y, _ = self.lstm(x)             # y: [B, T, 512]
+        x = y[:, -1, :]                 # Take last timestep's output
         x = self.tanh(x)
         x = self.dropout(x)
         x = self.fc1(x)
@@ -60,19 +53,21 @@ class BiLSTM(nn.Module):
 
 
 
+
+
 class StackedLSTM(nn.Module):
     def __init__(self, input_size, num_class):
         super().__init__()
-        self.fc0 = nn.Linear(input_size, 512)
-        self.lstm = nn.LSTM(input_size=512, hidden_size=256, num_layers=2, batch_first=True)
+        # self.fc0 = nn.Linear(201, 512)
+        self.lstm = nn.LSTM(input_size=201, hidden_size=256, num_layers=2, batch_first=True, bidirectional=True)
         self.tanh = nn.Tanh()
-        self.dropout = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(256, 256)
+        self.dropout = nn.Dropout(0.3)
+        self.fc1 = nn.Linear(512, 256)
         self.relu1 = nn.ReLU()
         self.fc2 = nn.Linear(256, num_class)
 
     def forward(self, x):
-        x = self.fc0(x).unsqueeze(1)
+        # x = self.fc0(x).unsqueeze(1)
         y, _ = self.lstm(x)
         x = y[:, -1, :]  # Take final hidden state
         x = self.tanh(x)

@@ -50,7 +50,7 @@ preprocess_conf:
 # Model Parameters
 model_conf:
   # Model to use
-  model: 'LSTMAdditiveAttention'
+  model: 'StackedLSTM'
 
   model_args:
     # Number of output classes; if null, automatically determined from label list
@@ -85,6 +85,6 @@ train_conf:
   # Label smoothing value for CrossEntropyLoss
   label_smoothing: 0.0
   # Maximum number of training epochs
-  max_epoch: 100
+  max_epoch: 300
   # Log training status every N iterations
   log_interval: 10
