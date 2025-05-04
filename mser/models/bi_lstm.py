@@ -2,30 +2,6 @@ import torch.nn as nn
 import torch
 
 
-
-# class BiLSTM(nn.Module):
-#     def __init__(self, input_size, num_class):
-#         super().__init__()
-#         self.fc0 = nn.Linear(in_features=201, out_features=512)
-#         self.lstm = nn.LSTM(input_size=512, hidden_size=256, bidirectional=True)
-#         self.tanh = nn.Tanh()
-#         self.dropout = nn.Dropout(p=0.5)
-#         self.fc1 = nn.Linear(in_features=256, out_features=256)
-#         self.relu1 = nn.ReLU()
-#         self.fc2 = nn.Linear(in_features=256, out_features=num_class)
-
-#     def forward(self, x):
-#         x = self.fc0(x)
-#         x = x.unsqueeze(dim=1)
-#         y, (h, c) = self.lstm(x)
-#         x = y.squeeze(axis=1)
-#         x = self.tanh(x)
-#         x = self.dropout(x)
-#         x = self.fc1(x)
-#         x = self.relu1(x)
-#         x = self.fc2(x)
-#         return x
-
 class BiLSTM(nn.Module):
     def __init__(self, input_size, num_class):
         super().__init__()
@@ -61,7 +37,7 @@ class StackedLSTM(nn.Module):
         # self.fc0 = nn.Linear(201, 512)
         self.lstm = nn.LSTM(input_size=201, hidden_size=256, num_layers=2, batch_first=True, bidirectional=True)
         self.tanh = nn.Tanh()
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.2)
         self.fc1 = nn.Linear(512, 256)
         self.relu1 = nn.ReLU()
         self.fc2 = nn.Linear(256, num_class)
@@ -77,8 +53,6 @@ class StackedLSTM(nn.Module):
         return self.fc2(x)
 
         
-import torch
-import torch.nn as nn
 
 class TemporalAdditiveAttention(nn.Module):
     def __init__(self, hidden_dim):
@@ -138,32 +112,6 @@ class LSTMAdditiveAttention(nn.Module):
         return x, attn_weights
 
 
-    # def __init__(self, input_size, num_class, fake_seq_len=12):
-    #     super().__init__()
-    #     self.fake_seq_len = fake_seq_len
-    #     self.embed_dim = input_size // fake_seq_len  # e.g. 312 // 12 = 26
-    #     assert input_size % fake_seq_len == 0, "Input size must be divisible by fake_seq_len"
-
-    #     self.lstm = nn.LSTM(input_size=self.embed_dim, hidden_size=256, batch_first=True, bidirectional=True)
-    #     self.attn = FeatureAdditiveAttention(feature_dim=256)
-    #     self.dropout = nn.Dropout(p=0.5)
-    #     self.fc1 = nn.Linear(256, 256)
-    #     self.relu1 = nn.ReLU()
-    #     self.fc2 = nn.Linear(256, num_class)
-
-    # def forward(self, x):  # x: [B, 312]
-    #     x = x.squeeze(1) if x.shape[1] == 1 else x  # remove singleton time dimension
-    #     B, F = x.shape
-    #     x = x.view(B, self.fake_seq_len, self.embed_dim)  # [B, T=12, F'=26]
-    #     lstm_out, _ = self.lstm(x)                         # [B, 12, 256]
-    #     avg_pooled = torch.mean(lstm_out, dim=1)           # [B, 256]
-    #     context, attn_weights = self.attn(avg_pooled)      # [B, 256], [B, 256]
-
-    #     x = self.dropout(context)
-    #     x = self.fc1(x)
-    #     x = self.relu1(x)
-    #     x = self.fc2(x)
-    #     return x, attn_weights
 
 
 class StackedLSTMAdditiveAttention(nn.Module):
