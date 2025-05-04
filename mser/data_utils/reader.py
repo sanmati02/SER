@@ -111,7 +111,9 @@ class CustomDataset(Dataset):
                 feature = feature.squeeze().astype(np.float32)
             else: 
                 # print(f"[DEBUG] Normalizing 2D [T,F] feature: shape = {feature.shape}")
-                feature = feature.reshape(1, -1)
+                # feature = feature.reshape(1, -1)
+                if feature.ndim == 1:
+                    feature = feature.reshape(1, -1)
                 feature = self.scaler.transform(feature).astype(np.float32)
                 
 

@@ -191,7 +191,10 @@ class MSERTrainer(object):
         data = []
         for i in tqdm(range(len(test_dataset))):
             feature = test_dataset[i][0]
-            data.append(feature)
+            if feature.ndim == 2:  # [T, F]
+                data.extend(feature)  # Add each [F] timestep
+            elif feature.ndim == 1:
+                data.append(feature)  # Already [F]
         scaler = StandardScaler().fit(data)
         joblib.dump(scaler, self.configs.dataset_conf.dataset.scaler_path)
         logger.info(f'Normalization file saved to: {self.configs.dataset_conf.dataset.scaler_path}')
@@ -241,26 +244,21 @@ class MSERTrainer(object):
         if self.configs.model_conf.model_args.get('num_class', None) is None:
             self.configs.model_conf.model_args.num_class = len(self.class_labels)
 
+        
         self.model = build_model(input_size=input_size, configs=self.configs)
         self.model.to(self.device)
         if self.log_level == "DEBUG" or self.log_level == "INFO":
             # summary(self.model, input_size=(1, self.test_dataset.audio_featurizer.feature_dim))
-            example_input = self.test_dataset[0][0]  # (T, F) or (F,)
-        
-            # Auto-handle case: shape is [T, F] for LSTM, or [F] for MLP
-           
-            if example_input.ndim == 2:
-                
-                seq_len, feat_dim = example_input.shape
-                input_shape = (1, seq_len, feat_dim)  # [B, T, F]
-            elif example_input.ndim == 1:
-                feat_dim = example_input.shape[0]
-                input_shape = (1, feat_dim)  # [B, F]
-            else:
-                raise ValueError(f"Unexpected input shape: {example_input.shape}")
-        
-            print(f"[Summary] Using input shape: {input_shape}")
-            summary(self.model, input_size=input_shape)
+            example_input = self.test_dataset[0][0]  # shape: [T, F] for sequence models
+
+            if example_input.ndim != 2:
+                raise ValueError(f"Expected input of shape [T, F], got {example_input.shape}")
+    
+            T, F = example_input.shape
+            input_tensor = torch.tensor(example_input, dtype=torch.float32).unsqueeze(0).to(self.device)  # [1, T, F]
+    
+            print(f"[Summary] Using real input shape: {input_tensor.shape}")
+            summary(self.model, input_data=input_tensor)
 
         label_smoothing = self.configs.train_conf.get('label_smoothing', 0.0)
         self.loss = torch.nn.CrossEntropyLoss(label_smoothing=label_smoothing)
@@ -503,7 +501,7 @@ class MSERTrainer(object):
             attention_weights = attention_weights.detach().cpu().numpy()
     
             if save_dir is not None:
-                attn_dir = os.path.join(save_dir, "attention_weights_seq_stacked")
+                attn_dir = os.path.join(save_dir, "attention_weights_seq_single")
                 os.makedirs(attn_dir, exist_ok=True)
     
                 for i, (weights, path) in enumerate(zip(attention_weights, paths)):
@@ -715,13 +713,13 @@ class MSERTrainer(object):
             report = classification_report(all_lbls, all_preds,
                                            target_names=self.class_labels,
                                            output_dict=True)
-            with open(os.path.join(save_dir, "class_report_stacked_attention.json"), "w") as fp:
+            with open(os.path.join(save_dir, "class_report_single_attention.json"), "w") as fp:
                 json.dump(report, fp, indent=2)
     
             # 4-c CSV of mistakes
             if wrong:
                 pd.DataFrame(wrong).to_csv(
-                    os.path.join(save_dir, "misclassified_stacked_attention.csv"), index=False)
+                    os.path.join(save_dir, "misclassified_single_attention.csv"), index=False)
                 logger.info(f"✓ {len(wrong)} mis-classified samples written")
     
         # reset to train mode for further training

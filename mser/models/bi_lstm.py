@@ -92,7 +92,7 @@ class TemporalAdditiveAttention(nn.Module):
         self.v = nn.Linear(hidden_dim, 1)
         self.norm = nn.LayerNorm(hidden_dim)
 
-        # Weight initialization
+        # Proper initialization
         nn.init.xavier_uniform_(self.W.weight)
         nn.init.zeros_(self.W.bias)
         nn.init.xavier_uniform_(self.v.weight)
@@ -100,27 +100,29 @@ class TemporalAdditiveAttention(nn.Module):
 
     def forward(self, lstm_outputs):  # [B, T, H]
         lstm_outputs = self.norm(lstm_outputs)
+        W_out = self.W(lstm_outputs)
+        scores = self.v(torch.tanh(W_out))
+    
+        # ✅ Clamp to prevent overflow and NaNs
+        scores = torch.nan_to_num(scores, nan=0.0, posinf=10.0, neginf=-10.0)
+        scores = scores.clamp(min=-10.0, max=10.0)
+    
+        weights = torch.softmax(scores, dim=1)  # [B, T, 1]
+        weights = torch.nan_to_num(weights, nan=1.0 / weights.shape[1])
 
-        W_out = self.W(lstm_outputs)                            # [B, T, H]
-        scores = self.v(torch.tanh(W_out))                      # [B, T, 1]
+        # print("scores shape:", scores.shape)   # should be [B, T, 1] where T > 1
+        # print("weights shape:", weights.shape) # should be [B, T, 1] before squeeze
+    
+        context = torch.sum(weights * lstm_outputs, dim=1)
+        return context, weights.squeeze(-1)
 
-        # print(f"[DEBUG] W_out std: {W_out.std().item()}")
-        # print(f"[DEBUG] scores std: {scores.std().item()}")
-        
-        scores = scores.masked_fill(torch.isnan(scores), 0)
-        weights = torch.softmax(scores, dim=1)                  # [B, T, 1]
-
-        # print(f"[DEBUG] attention weights sample: {weights[0].detach().cpu().numpy().squeeze()}")
-        
-        context = torch.sum(weights * lstm_outputs, dim=1)      # [B, H]
-        return context, weights.squeeze(-1)                # [B, H], [B, T]
 
 
 
 class LSTMAdditiveAttention(nn.Module):
     def __init__(self, input_size, num_class):
         super().__init__()
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=256,
+        self.lstm = nn.LSTM(input_size=201, hidden_size=256,
                             batch_first=True, bidirectional=True)
         self.attn = TemporalAdditiveAttention(hidden_dim=512)  # 256 * 2
 
@@ -132,6 +134,7 @@ class LSTMAdditiveAttention(nn.Module):
     def forward(self, x):  # x: [B, T, F]
         lstm_out, _ = self.lstm(x)                     # [B, T, 512]
         context, attn_weights = self.attn(lstm_out)    # [B, 512], [B, T]
+        # print(attn_weights)
         x = self.dropout(context)
         x = self.fc1(x)
         x = self.relu(x)
