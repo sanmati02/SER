@@ -644,15 +644,25 @@ class MSERTrainer(object):
             os.makedirs(save_dir, exist_ok=True)
     
             # 4-a Confusion matrix PNG
-            cm = confusion_matrix(all_lbls, all_preds)
-            plt.figure(figsize=(6, 6))
-            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            cm = confusion_matrix(all_lbls, all_preds, labels=list(range(len(self.class_labels))))
+            cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
+            
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(cm_percent, annot=True, fmt=".2f", cmap="Reds",
                         xticklabels=self.class_labels,
-                        yticklabels=self.class_labels)
-            plt.xlabel("Predicted"); plt.ylabel("True")
+                        yticklabels=self.class_labels,
+                        cbar_kws={'label': 'Percentage (%)'}, vmin=0, vmax=100)
+            plt.title("Confusion Matrix Heatmap (Percentages) BiLSTM")
+            plt.xlabel("Predicted Emotion")
+            plt.ylabel("True Emotion")
+            plt.tight_layout()
+            
+            os.makedirs(save_dir, exist_ok=True)
             fname = os.path.join(save_dir, f"confusion_{int(time.time())}.png")
-            plt.tight_layout(); plt.savefig(fname); plt.close()
-            logger.info(f"✓ confusion matrix saved → {fname}")
+            plt.savefig(fname)
+            plt.close()
+            logger.info(f"✓ confusion matrix (percentage) saved → {fname}")
+
     
             # 4-b Per-class precision / recall / F1
             report = classification_report(all_lbls, all_preds,
