@@ -29,6 +29,9 @@ from mser.utils.utils import dict_to_object, plot_confusion_matrix, print_argume
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+import csv
+from datetime import datetime
+
 
 class MSERTrainer(object):
     def __init__(self,
@@ -119,6 +122,33 @@ class MSERTrainer(object):
         self.eval_loss, self.eval_acc = None, None
         self.test_log_step, self.train_log_step = 0, 0
         self.stop_train, self.stop_eval = False, False
+
+
+    def save_results_to_csv(self, filename="training_results.csv"):
+        """Save training and evaluation results to a CSV file.
+        
+        Args:
+            filename (str): Path to the CSV file where results will be saved.
+        """
+        if not hasattr(self, "epoch_train_loss") or not hasattr(self, "epoch_eval_loss"):
+            logger.warning("No training/evaluation results to save.")
+            return
+
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+        # Prepare data
+        epochs = list(range(1, len(self.epoch_train_loss) + 1))
+        headers = ["Epoch", "Train Loss", "Train Accuracy", "Eval Loss", "Eval Accuracy"]
+        rows = zip(epochs, self.epoch_train_loss, self.epoch_train_acc, self.epoch_eval_loss, self.epoch_eval_acc)
+
+        # Write to CSV
+        with open(filename, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(headers)
+            writer.writerows(rows)
+
+        logger.info(f"Results saved to {filename}")
 
     def __setup_dataloader(self, is_train=False):
         self.audio_featurizer = AudioFeaturizer(feature_method=self.configs.preprocess_conf.feature_method,
@@ -314,7 +344,8 @@ class MSERTrainer(object):
               log_dir='log/',
               max_epoch=None,
               resume_model=None,
-              pretrained_model=None):
+              pretrained_model=None,
+            ):
         """
         Train the model
 
@@ -414,6 +445,11 @@ class MSERTrainer(object):
                     logger.info(f"Early stopping triggered after {early_stopping_patience} epochs with no improvement.")
                     break
 
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                #csv_filename = os.path.join(log_dir, f"training_results_dur_3.csv")
+                csv_filename = "duration_tuning/training_results_dur_3.csv"
+                self.save_results_to_csv(csv_filename)
+
     
         
         # === Compose filename ===
@@ -448,6 +484,7 @@ class MSERTrainer(object):
         
         logger.info(f"Saved loss curve to {loss_curve_path}")
         logger.info(f"Saved accuracy curve to {acc_curve_path}")
+
 
 
 
