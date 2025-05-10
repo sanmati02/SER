@@ -1,12 +1,18 @@
 import distutils.util
 import os
-
 from loguru import logger
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 def print_arguments(args=None, configs=None, title=None):
+    """
+    Log command-line arguments and/or config file parameters.
+
+    :param args: Parsed argparse arguments.
+    :param configs: Configuration dictionary (e.g., loaded from YAML or JSON).
+    :param title: Optional custom title for logging config parameters.
+    """
     if args:
         logger.info("----------- Extra Command-line Arguments -----------")
         for arg, value in sorted(vars(args).items()):
@@ -31,6 +37,16 @@ def print_arguments(args=None, configs=None, title=None):
 
 
 def add_arguments(argname, type, default, help, argparser, **kwargs):
+    """
+    Add an argument to an ArgumentParser with bool support.
+
+    :param argname: Argument name (string, no leading dashes)
+    :param type: Expected type (e.g., str, int, bool)
+    :param default: Default value
+    :param help: Help description for argparse
+    :param argparser: ArgumentParser object
+    :param kwargs: Additional argparse options
+    """
     type = distutils.util.strtobool if type == bool else type
     argparser.add_argument("--" + argname,
                            default=default,
@@ -39,12 +55,20 @@ def add_arguments(argname, type, default, help, argparser, **kwargs):
                            **kwargs)
 
 
+# Enables dot-access to dictionary values
 class Dict(dict):
     __setattr__ = dict.__setitem__
     __getattr__ = dict.__getitem__
 
 
 def dict_to_object(dict_obj):
+    """
+    Recursively convert nested dictionaries into Dict objects
+    for attribute-style access.
+
+    :param dict_obj: Dictionary
+    :return: Dict object (with attribute access)
+    """
     if not isinstance(dict_obj, dict):
         return dict_obj
     inst = Dict()
@@ -55,25 +79,25 @@ def dict_to_object(dict_obj):
 
 def plot_confusion_matrix(cm, save_path, class_labels, show=False):
     """
-    Plot a confusion matrix
+    Plot and save a normalized confusion matrix.
 
-    :param cm: Confusion matrix, a 2D array showing true vs predicted classifications.
-    :param save_path: Path to save the confusion matrix image.
-    :param class_labels: List of class labels.
-    :param show: Whether to display the matrix after saving.
+    :param cm: Confusion matrix (2D numpy array)
+    :param save_path: Path to save image
+    :param class_labels: List of class names
+    :param show: If True, also display the matrix
     """
-    # Detect if labels contain non-ASCII characters (e.g., Chinese) and adjust font
+    # Check for non-ASCII characters (e.g., Chinese)
     s = ''.join(class_labels)
     is_ascii = all(ord(c) < 128 for c in s)
     if not is_ascii:
+        # Use a compatible font for non-ASCII labels
         plt.rcParams['font.sans-serif'] = ['SimHei']
         plt.rcParams['axes.unicode_minus'] = False
 
-    # Initialize plot
     plt.figure(figsize=(12, 8), dpi=100)
     np.set_printoptions(precision=2)
 
-    # Plot normalized probabilities
+    # Plot each cell's normalized value
     ind_array = np.arange(len(class_labels))
     x, y = np.meshgrid(ind_array, ind_array)
     for x_val, y_val in zip(x.flatten(), y.flatten()):
@@ -82,19 +106,20 @@ def plot_confusion_matrix(cm, save_path, class_labels, show=False):
             continue
         plt.text(x_val, y_val, "%0.2f" % (c,), color='red', fontsize=15, va='center', ha='center')
 
+    # Normalize by column totals
     m = np.sum(cm, axis=0) + 1e-6
     plt.imshow(cm / m, interpolation='nearest', cmap=plt.cm.binary)
-    plt.title('Confusion Matrix' if is_ascii else '混淆矩阵')
+    plt.title('Confusion Matrix' if is_ascii else 'Confusion Matrix (Non-ASCII Labels)')
     plt.colorbar()
 
-    # Set label ticks
+    # Label axes
     xlocations = np.array(range(len(class_labels)))
     plt.xticks(xlocations, class_labels, rotation=90)
     plt.yticks(xlocations, class_labels)
-    plt.ylabel('Actual label' if is_ascii else '实际标签')
-    plt.xlabel('Predicted label' if is_ascii else '预测标签')
+    plt.ylabel('Actual label')
+    plt.xlabel('Predicted label')
 
-    # Minor ticks for grid
+    # Add minor ticks for grid lines
     tick_marks = np.array(range(len(class_labels))) + 0.5
     plt.gca().set_xticks(tick_marks, minor=True)
     plt.gca().set_yticks(tick_marks, minor=True)
@@ -103,7 +128,7 @@ def plot_confusion_matrix(cm, save_path, class_labels, show=False):
     plt.grid(True, which='minor', linestyle='-')
     plt.gcf().subplots_adjust(bottom=0.15)
 
-    # Save image
+    # Save the figure
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, format='png')
     if show:
@@ -112,10 +137,10 @@ def plot_confusion_matrix(cm, save_path, class_labels, show=False):
 
 def convert_string_based_on_type(a, b):
     """
-    Convert a string value to match the type of a.
+    Convert string b to the same type as variable a.
 
-    :param a: Example variable whose type we want to match
-    :param b: String value to convert
+    :param a: Example variable with target type
+    :param b: String to convert
     :return: Converted value
     """
     if isinstance(a, int):

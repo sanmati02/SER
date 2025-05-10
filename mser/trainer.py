@@ -643,15 +643,12 @@ class MSERTrainer(object):
             Return a meta-data dict for common SER corpora.
             Works for:
               • RAVDESS   03-01-02-01-01-01-12.wav
-              • CREMA-D   1043_DFA_ANG_XX.wav
-              • TESS      OAF_angry_neutral_0013.wav
-              • SAVEE     DC_angry.wav
+             
             Anything else → empty dict.
             """
             name = os.path.basename(path)
             stem = os.path.splitext(name)[0]
         
-            # -------- RAVDESS --------------------------------------------------
             if '-' in stem and len(stem.split('-')) == 7:
                 t = stem.split('-')
                 return dict(
@@ -665,39 +662,7 @@ class MSERTrainer(object):
                     actor     = int(t[6]),
                 )
         
-            # -------- CREMA-D --------------------------------------------------
-            # 1043_DFA_ANG_XX → [ID]_[sentence]_ANG_[take]
-            if '_' in stem and stem.split('_')[2] in {'ANG','DIS','FEA','HAP','NEU','SAD'}:
-                id_, utt, emo, _ = stem.split('_', 3)
-                return dict(
-                    corpus    = 'CREMA-D',
-                    speaker   = int(id_),
-                    sentence  = utt,
-                    emotion   = emo,
-                )
-        
-            # -------- TESS -----------------------------------------------------
-            # OAF_angry_neutral_0013
-            if stem.startswith(('OAF', 'YAF')) and '_' in stem:
-                who, emo, _, idx = stem.split('_')
-                return dict(
-                    corpus  = 'TESS',
-                    actor   = who,
-                    emotion = emo,
-                    index   = int(idx),
-                )
-        
-            # -------- SAVEE ----------------------------------------------------
-            # DC_angry
-            if stem.endswith(('angry','disgust','fear','happy','neutral','sad','surprise')):
-                speaker, emo = stem.split('_')
-                return dict(
-                    corpus  = 'SAVEE',
-                    actor   = speaker,
-                    emotion = emo,
-                )
-        
-            # -------- unknown --------------------------------------------------
+            
             return {}
 
     
@@ -714,12 +679,7 @@ class MSERTrainer(object):
                 label    = label.to(self.device).long()
     
                 output = eval_model(features)
-                # logits = output[0] if isinstance(output, tuple) else output
-                # if isinstance(output, tuple):
-                #     attention_outputs.append(output)  # <-- Collect for summary
-                #     output = output[0]
-
-
+                
                 # Only unpack if output is a tuple
                 if isinstance(output, tuple):
                     attn_weights = output[1]  # Save for later
