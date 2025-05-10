@@ -493,63 +493,100 @@ class MSERTrainer(object):
         logger.info(f"Saved loss curve to {loss_curve_path}")
         logger.info(f"Saved accuracy curve to {acc_curve_path}")
 
-    def summarize_attention(self,attention_outputs, save_dir='analysis/'):
-    
 
+
+    def summarize_attention_all_emotions(self, attention_outputs, predictions, labels, class_labels, save_dir="attention_analysis"):
         os.makedirs(save_dir, exist_ok=True)
     
-        all_weights = []
-        max_len = 0
+        # Organize weights by emotion and correctness
+        correct_weights = {label: [] for label in class_labels}
+        incorrect_weights = {label: [] for label in class_labels}
+        all_weights = {label: [] for label in class_labels}
     
-        # Step 1: Extract attention weights and find max length
-        for output in attention_outputs:
-            weights = output[1].detach().cpu().numpy()  # [B, T]
-            for w in weights:
-                max_len = max(max_len, len(w))
-                all_weights.append(w)
+        for attn_output, pred, true in zip(attention_outputs, predictions, labels):
+            #weights = attn_output.detach().cpu().numpy()  # shape [T]
+            weights = attn_output["weights"]
+            pred = attn_output["pred"]
+            true = attn_output["true"]
+
+            max_len = max(len(w) for w in [weights])
+            if len(weights) < max_len:
+                weights = np.pad(weights, (0, max_len - len(weights)), mode='constant')
+            emotion = class_labels[true]
+            all_weights[emotion].append(weights)
+            if pred == true:
+                correct_weights[emotion].append(weights)
+            else:
+                incorrect_weights[emotion].append(weights)
     
-        # Step 2: Pad all to max_len
-        padded_weights = []
-        for w in all_weights:
-            if len(w) < max_len:
-                w = np.pad(w, (0, max_len - len(w)), mode='constant')
-            padded_weights.append(w)
-    
-        all_weights = np.stack(padded_weights)  # [N, T]
-    
-        # Step 3: Plot mean ± std
-        mean_weights = np.mean(all_weights, axis=0)
-        std_weights = np.std(all_weights, axis=0)
-    
-        plt.figure(figsize=(10, 4))
-        plt.plot(mean_weights, label='Mean Attention', color='navy')
-        plt.fill_between(np.arange(max_len),
-                         mean_weights - std_weights,
-                         mean_weights + std_weights,
-                         alpha=0.3, label='±1 Std', color='skyblue')
-        plt.title("Average Attention Across Samples")
-        plt.xlabel("Timestep")
-        plt.ylabel("Attention Weight")
-        plt.legend()
+        # === Figure 1: Mean ± Std per emotion ===
+        fig, axes = plt.subplots(1, len(class_labels), figsize=(28, 4), sharey=True)
+        for idx, emotion in enumerate(class_labels):
+            ax = axes[idx]
+            if correct_weights[emotion]:
+                corr_raw = correct_weights[emotion]
+                max_len = max(len(w) for w in corr_raw)
+                corr_padded = [np.pad(w, (0, max_len - len(w)), mode='constant') for w in corr_raw]
+                corr = np.stack(corr_padded)
+                mean_corr = corr.mean(axis=0)
+                std_corr = corr.std(axis=0)
+                ax.plot(mean_corr, label='Correct', color='blue')
+                ax.fill_between(np.arange(len(mean_corr)), mean_corr - std_corr, mean_corr + std_corr,
+                                color='blue', alpha=0.2)
+            if incorrect_weights[emotion]:
+                incorr_raw = incorrect_weights[emotion]
+                max_len = max(len(w) for w in incorr_raw)
+                incorr_padded = [np.pad(w, (0, max_len - len(w)), mode='constant') for w in incorr_raw]
+                incorr = np.stack(incorr_padded)
+                mean_incorr = incorr.mean(axis=0)
+                std_incorr = incorr.std(axis=0)
+                ax.plot(mean_incorr, label='Incorrect', color='red', linestyle='--')
+                ax.fill_between(np.arange(len(mean_incorr)), mean_incorr - std_incorr, mean_incorr + std_incorr,
+                                color='red', alpha=0.2)
+            ax.set_title(emotion)
+            ax.set_xlabel("Timestep")
+        axes[0].set_ylabel("Attention Weight")
+        fig.suptitle("Mean ± Std Attention per Emotion (Correct vs Incorrect)", fontsize=14)
+        fig.legend(loc='upper right')
         plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, "attention_mean_std.png"))
+        plt.savefig(os.path.join(save_dir, "attention_mean_std_all_emotions.png"))
         plt.close()
     
-        # Step 4: Heatmap of all samples
-        plt.figure(figsize=(12, 6))
-        sns.heatmap(all_weights, cmap='Blues', cbar=True)
-        plt.title("Attention Weights Heatmap Across Samples")
-        plt.xlabel("Timestep")
-        plt.ylabel("Sample Index")
-        plt.tight_layout()
-        plt.savefig(os.path.join(save_dir, "attention_heatmap_all.png"))
+        import matplotlib.gridspec as gridspec
+
+        
+        fig = plt.figure(figsize=(10, 10))  # Reduce width to make plots less wide
+        gs = gridspec.GridSpec(4, 2, figure=fig)  # 4 rows, 2 columns
+        emotion_axes = []
+        
+        for idx, emotion in enumerate(class_labels):
+            ax = fig.add_subplot(gs[idx])
+            heat_raw = all_weights[emotion]
+            max_len = max(len(w) for w in heat_raw)
+            heat_padded = [np.pad(w, (0, max_len - len(w)), mode='constant') for w in heat_raw]
+            sns.heatmap(np.stack(heat_padded), ax=ax, cmap='Blues', cbar=False)
+        
+            ax.set_title(emotion, fontsize=10)
+            ax.set_xlabel("Timestep", fontsize=8)
+            ax.set_ylabel("Sample Index", fontsize=8)
+            emotion_axes.append(ax)
+        
+        # Hide extra subplot if fewer than 8 emotions
+        for idx in range(len(class_labels), 8):
+            fig.add_subplot(gs[idx]).axis('off')
+        
+        fig.suptitle("Attention Weight Heatmaps per Emotion", fontsize=14)
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.savefig(os.path.join(save_dir, "attention_heatmaps_all_emotions.png"))
         plt.close()
-    
 
 
 
     
-
+        return f"Saved mean/std and heatmap plots to: {save_dir}"
+    
+    
+        
     def evaluate(self,
                  resume_model: str | None = None,
                  save_dir:     str | None = None):
@@ -678,24 +715,38 @@ class MSERTrainer(object):
     
                 output = eval_model(features)
                 # logits = output[0] if isinstance(output, tuple) else output
+                # if isinstance(output, tuple):
+                #     attention_outputs.append(output)  # <-- Collect for summary
+                #     output = output[0]
+
+
+                # Only unpack if output is a tuple
                 if isinstance(output, tuple):
-                    attention_outputs.append(output)  # <-- Collect for summary
+                    attn_weights = output[1]  # Save for later
                     output = output[0]
-                # self.attention_vis(output, paths)
-                loss   = self.loss(output, label)
+                
+                loss = self.loss(output, label)
                 losses.append(loss.item())
-    
                 acc = accuracy(output, label)
                 accs.append(acc)
-
-                if isinstance(output, tuple):
-                    output = output[0]
-                probs = output.softmax(dim=1).cpu().numpy()   # or just output
+                
+                probs = output.softmax(dim=1).cpu().numpy()
                 preds = probs.argmax(axis=1)
-                lbls  = label.cpu().numpy()
-    
+                lbls = label.cpu().numpy()
+                
                 all_preds.extend(preds.tolist())
                 all_lbls.extend(lbls.tolist())
+                
+                # collect attention *after* preds are computed
+                if self.configs.model_conf.model in ['LSTMAdditiveAttention', 'StackedLSTMAdditiveAttention']:
+                    attention_outputs.extend([
+                        {
+                            "weights": w.detach().cpu().numpy(),
+                            "true": int(t),
+                            "pred": int(p)
+                        }
+                        for w, t, p in zip(attn_weights, lbls, preds)
+                    ])
     
                 # collect mis-predictions if we have file paths
                 if paths is not None:
@@ -712,7 +763,14 @@ class MSERTrainer(object):
 
 
         if self.configs.model_conf.model == 'LSTMAdditiveAttention' or self.configs.model_conf.model == 'StackedLSTMAdditiveAttention':
-            self.summarize_attention(attention_outputs, save_dir=f'analysis/summary_attention_{self.configs.model_conf.model}')
+            self.summarize_attention_all_emotions(
+                attention_outputs=attention_outputs,
+                predictions=all_preds,
+                labels=all_lbls,
+                class_labels=["Neutral", "Happy", "Sad", "Angry", "Fearful", "Disgusted", "Surprised"],
+                save_dir="attention_plots"
+            )
+
 
     
         # ------------------------------------------------------------------ #
