@@ -64,8 +64,8 @@ for lr, bs, model, wd in combinations:
     # 🔍 Immediately parse the log after training ends
     if os.path.exists(log_file):
         acc, acc_ep, loss, loss_ep = parse_log_file(log_file)
-        print(f"✅ Finished: {os.path.basename(log_file)}")
-        print(f"   🔵 Best Accuracy: {acc:.5f} at epoch {acc_ep}")
-        print(f"   🟠 Lowest Loss  : {loss:.5f} at epoch {loss_ep}")
+        print(f"Finished: {os.path.basename(log_file)}")
+        print(f"   Best Accuracy: {acc:.5f} at epoch {acc_ep}")
+        print(f"   Lowest Loss  : {loss:.5f} at epoch {loss_ep}")
     else:
-        print(f"⚠️ Log file not found: {log_file}")
+        print(f"Log file not found: {log_file}")
