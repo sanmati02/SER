@@ -121,9 +121,7 @@ class MSERTrainer(object):
             self.configs.dataset_conf.dataLoader.num_workers = 0
             logger.warning('Windows does not support multi-threaded data loading. Using single-threaded loading.')
 
-        if self.configs.preprocess_conf.feature_method == 'Emotion2Vec':
-            self.configs.dataset_conf.dataLoader.num_workers = 0
-            logger.warning('Emotion2Vec feature extraction does not support multithreading. Switching to single-threaded.')
+        
         self.max_step, self.train_step = None, None
         self.train_loss, self.train_acc = None, None
         self.train_eta_sec = None
@@ -782,7 +780,7 @@ class MSERTrainer(object):
         self.model.train()
         return avg_loss, avg_acc
 
-    def export(self, save_model_path='models/', resume_model='models/BiLSTM_Emotion2Vec/best_model/'):
+    def export(self, save_model_path='models/', resume_model='models/BiLSTM_CustomFeature/best_model/'):
         """
         Export the inference model
 
