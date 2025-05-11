@@ -39,7 +39,7 @@ dataset_conf:
 
 # Data Preprocessing Parameters
 preprocess_conf:
-  # Audio feature extraction method (supported: CustomFeature, Emotion2Vec)
+  # Audio feature extraction method (supported: CustomFeature)
   feature_method: 'CustomFeature'
   method_args:
     # Feature extraction granularity
