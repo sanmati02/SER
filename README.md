@@ -93,9 +93,7 @@ python eval.py --configs=configs/bi_lstm.yml
 
 
 
-## Supported Features
-
-### Handcrafted Features
+## Features
 
 * **MFCC**: Mel-Frequency Cepstral Coefficients
 * **Chroma**: Pitch class profiles
