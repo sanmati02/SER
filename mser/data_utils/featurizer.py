@@ -8,7 +8,6 @@ from loguru import logger
 
 class AudioFeaturizer(object):
     """
-    A class for extracting audio features using either custom methods or a pretrained Emotion2Vec model.
 
     :param feature_method: Feature extraction method name ('CustomFeature' or 'Emotion2Vec')
     :type feature_method: str
@@ -37,24 +36,6 @@ class AudioFeaturizer(object):
             return self.emotion2vec_features(x)
         else:
             raise Exception(f'Feature extraction method {self._feature_method} does not exist!')  # Raise error for unsupported method
-
-    def emotion2vec_features(self, x) -> np.ndarray:
-        """
-        Extract features using a pretrained Emotion2Vec model.
-
-        :param x: Audio waveform
-        :return: Emotion2Vec features as numpy array
-        """
-        from mser.utils.emotion2vec_predict import Emotion2vecPredict
-
-        # Load the model only once
-        if self._feature_model is None:
-            use_gpu = True if torch.cuda.is_available() else False
-            self._feature_model = Emotion2vecPredict('iic/emotion2vec_base', revision="v2.0.4", use_gpu=use_gpu)
-
-        # Extract features using Emotion2Vec model
-        feats = self._feature_model.extract_features(x, self._method_args)
-        return feats
 
     @staticmethod
     def custom_features(x, sample_rate: float) -> np.ndarray:
