@@ -606,9 +606,7 @@ class MSERTrainer(object):
         acc  : float   Average accuracy  over the test set.
         """
     
-        # ------------------------------------------------------------------ #
-        # 1) House-keeping: dataloader, model, checkpoint                     #
-        # ------------------------------------------------------------------ #
+        
         if self.test_loader is None:
             self.__setup_dataloader()
         if self.model is None:
@@ -629,13 +627,9 @@ class MSERTrainer(object):
         eval_model = self.model.module if isinstance(
             self.model, torch.nn.parallel.DistributedDataParallel) else self.model
     
-        # ------------------------------------------------------------------ #
-        # 2) Evaluation loop                                                 #
-        # ------------------------------------------------------------------ #
+       
         losses, accs, all_lbls, all_preds, wrong = [], [], [], [], []
-        # --------------------------------------------------------------------- #
-#  Meta-data parser that never crashes                                  #
-# --------------------------------------------------------------------- #
+ 
         def _parse_meta(path: str) -> dict:
             """
             Return a meta-data dict for common SER corpora.
@@ -731,15 +725,11 @@ class MSERTrainer(object):
 
 
     
-        # ------------------------------------------------------------------ #
-        # 3) Metrics                                                         #
-        # ------------------------------------------------------------------ #
+       
         avg_loss = float(np.mean(losses)) if losses else -1
         avg_acc  = float(np.mean(accs))   if accs  else -1
     
-        # ------------------------------------------------------------------ #
-        # 4) Artefacts (optional)                                            #
-        # ------------------------------------------------------------------ #
+      
         if save_dir is not None:
             os.makedirs(save_dir, exist_ok=True)
     
