@@ -794,3 +794,224 @@ class MSERTrainer(object):
         os.makedirs(os.path.dirname(infer_model_path), exist_ok=True)
         torch.jit.save(infer_model, infer_model_path)
         logger.info("Inference model saved to: {}".format(infer_model_path))
+   
+    def visualize_confidence(self, confidences, all_lbls, all_preds, emotion_labels, save_dir='analysis/'):
+        """
+        Visualize the confidence and performance metrics using actual emotion labels.
+
+        Parameters:
+        - confidences: List of confidence scores for each prediction.
+        - all_lbls: List of true labels (indices).
+        - all_preds: List of predicted labels (indices).
+        - emotion_labels: List of actual emotion labels (e.g., ["Anger", "Happiness"]).
+        - save_dir: Directory where the images will be saved.
+        """
+        os.makedirs(save_dir, exist_ok=True)
+
+        # 1. Histogram of Confidence Scores
+        plt.figure(figsize=(8, 6))
+        plt.hist(confidences, bins=30, color='skyblue', edgecolor='black')
+        plt.title("Distribution of Model Confidence Scores")
+        plt.xlabel("Confidence Score")
+        plt.ylabel("Frequency")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'confidence_histogram.png'))
+        plt.close()
+
+        # 2. Confidence vs Accuracy (Scatter plot)
+        accuracies = [1 if pred == true else 0 for pred, true in zip(all_preds, all_lbls)]
+        plt.figure(figsize=(8, 6))
+        plt.scatter(confidences, accuracies, alpha=0.5, color='blue', edgecolors='w', s=60)
+        plt.title("Confidence vs Accuracy")
+        plt.xlabel("Confidence Score")
+        plt.ylabel("Accuracy (1 = Correct, 0 = Incorrect)")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'confidence_vs_accuracy.png'))
+        plt.close()
+
+        # 3. Confusion Matrix with Confidence
+        cm = confusion_matrix(all_lbls, all_preds)
+        cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm_percent, annot=True, fmt=".2f", cmap="Reds", 
+                    xticklabels=emotion_labels, yticklabels=emotion_labels, 
+                    cbar_kws={'label': 'Percentage (%)'}, vmin=0, vmax=100)
+        plt.title("Confusion Matrix with Confidence")
+        plt.xlabel("Predicted Emotion")
+        plt.ylabel("True Emotion")
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'confusion_matrix_with_confidence.png'))
+        plt.close()
+
+        # 4. Confidence Distribution per Class (Boxplot)
+        import pandas as pd
+        df = pd.DataFrame({'True Class': all_lbls, 'Confidence': confidences})
+        plt.figure(figsize=(8, 6))
+        sns.boxplot(x='True Class', y='Confidence', data=df, palette="Set2")
+        plt.xticks(ticks=range(len(emotion_labels)), labels=emotion_labels)
+        plt.title("Confidence Distribution per Class")
+        plt.xlabel("True Emotion")
+        plt.ylabel("Confidence Score")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(os.path.join(save_dir, 'confidence_per_class.png'))
+        plt.close()
+
+        print(f"Visualizations saved to {save_dir}")
+   
+    def evaluate_confidence(self, resume_model: str | None = None, save_dir: str | None = None, emotion_labels=None):
+        """
+        Run evaluation while tracking the model's confidence scores and visualizing them using actual emotion labels.
+
+        Parameters:
+        ----------
+        resume_model : str | None
+            Path to a checkpoint directory or *.pth file to evaluate.
+        save_dir : str | None
+            Directory where confusion-matrix PNG, class report (JSON), 
+            misclassification list (CSV), and confidence visualizations will be written. If None, no files are saved.
+        emotion_labels : list
+            A list of emotion labels (e.g., ["Anger", "Happiness", "Sadness"]).
+        
+        Returns:
+        -------
+        loss : float   Average cross-entropy loss over the test set.
+        acc  : float   Average accuracy  over the test set.
+        """
+
+        # Define the _parse_meta function inside evaluate_confidence
+        def _parse_meta(path: str) -> dict:
+            """
+            Return a meta-data dict for common SER corpora.
+            Works for:
+            • RAVDESS   03-01-02-01-01-01-12.wav
+            • CREMA-D   1043_DFA_ANG_XX.wav
+            • TESS      OAF_angry_neutral_0013.wav
+            • SAVEE     DC_angry.wav
+            Anything else → empty dict.
+            """
+            name = os.path.basename(path)
+            stem = os.path.splitext(name)[0]
+
+            # -------- RAVDESS --------------------------------------------------
+            if '-' in stem and len(stem.split('-')) == 7:
+                t = stem.split('-')
+                return dict(
+                    corpus    = 'RAVDESS',
+                    modality  = int(t[0]),
+                    channel   = int(t[1]),
+                    emotion   = int(t[2]),
+                    intensity = int(t[3]),
+                    statement = int(t[4]),
+                    repetition= int(t[5]),
+                    actor     = int(t[6]),
+                )
+
+            # -------- CREMA-D --------------------------------------------------
+            if '_' in stem and stem.split('_')[2] in {'ANG', 'DIS', 'FEA', 'HAP', 'NEU', 'SAD'}:
+                id_, utt, emo, _ = stem.split('_', 3)
+                return dict(
+                    corpus    = 'CREMA-D',
+                    speaker   = int(id_),
+                    sentence  = utt,
+                    emotion   = emo,
+                )
+
+            # -------- TESS -----------------------------------------------------
+            if stem.startswith(('OAF', 'YAF')) and '_' in stem:
+                who, emo, _, idx = stem.split('_')
+                return dict(
+                    corpus  = 'TESS',
+                    actor   = who,
+                    emotion = emo,
+                    index   = int(idx),
+                )
+
+            # -------- SAVEE ----------------------------------------------------
+            if stem.endswith(('angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise')):
+                speaker, emo = stem.split('_')
+                return dict(
+                    corpus  = 'SAVEE',
+                    actor   = speaker,
+                    emotion = emo,
+                )
+
+            return {}
+
+        # Setup dataloader and model if not already done
+        if self.test_loader is None:
+            self.__setup_dataloader()
+
+        if self.model is None:
+            self.__setup_model(input_size=self.test_dataset.audio_featurizer.feature_dim)
+
+        if resume_model is not None:
+            ckpt = resume_model
+            if os.path.isdir(ckpt):
+                ckpt = os.path.join(ckpt, "model.pth")
+            assert os.path.exists(ckpt), f"{ckpt} does not exist!"
+            self.model.load_state_dict(torch.load(ckpt, weights_only=False), strict=False)
+            logger.info(f"✓ loaded checkpoint {ckpt}")
+
+        self.model.eval()
+        eval_model = self.model.module if isinstance(self.model, torch.nn.parallel.DistributedDataParallel) else self.model
+
+        losses, accs, all_lbls, all_preds, confidences = [], [], [], [], []
+        wrong = []
+
+        with torch.no_grad():
+            for batch in tqdm(self.test_loader, desc="Eval"):
+                features, label, *rest = batch
+                input_lens_ratio = rest[0]
+                paths = rest[1] if len(rest) == 2 else None
+                features = features.to(self.device)
+                label = label.to(self.device).long()
+
+                output = eval_model(features)
+
+                if isinstance(output, tuple):
+                    output = output[0]
+
+                loss = self.loss(output, label)
+                acc = accuracy(output, label)
+                losses.append(loss.item())
+                accs.append(acc)
+
+                probs = output.softmax(dim=1).cpu().numpy()  # Get softmax probabilities
+                preds = probs.argmax(axis=1)
+                confidences.extend(np.max(probs, axis=1))  # Store the confidence (max softmax value)
+
+                all_preds.extend(preds.tolist())
+                all_lbls.extend(label.cpu().numpy().tolist())
+
+                # Collect mis-predictions if we have file paths
+                if paths is not None:
+                    for p, t, path in zip(preds, label.cpu().numpy(), paths):
+                        if p != t:
+                            wav_path = _npy2wav.get(path, path)
+                            wrong.append({
+                                'path': path,
+                                'wav': wav_path,
+                                'true': int(t),
+                                'pred': int(p),
+                                **_parse_meta(wav_path)
+                            })
+
+        avg_loss = float(np.mean(losses)) if losses else -1
+        avg_acc = float(np.mean(accs)) if accs else -1
+
+        # Save Results and Confidence Visualizations
+        if save_dir is not None:
+            os.makedirs(save_dir, exist_ok=True)
+
+            # Save the confidence scores to a file
+            with open(os.path.join(save_dir, "confidence_scores.txt"), 'w') as f:
+                for confidence in confidences:
+                    f.write(f"{confidence}\n")
+
+            # Create visualizations
+            self.visualize_confidence(confidences, all_lbls, all_preds, emotion_labels, save_dir)
+
+        return avg_loss, avg_acc
