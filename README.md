@@ -69,7 +69,7 @@ SER/
 
 ## Usage
 
-### Training a Model
+### Training a Model on RAVDESS
 
 - Ensure that `config/bi_lstm.yaml` is set to `train_list_features.txt` and `test_list_features.txt`. 
 - Adjust the model name in `config/bi_lstm.yaml` to `BiLSTM`, `StackedLSTM`, `LSTMAdditiveAttention`, or `StackedLSTMAdditiveAttention`, 
@@ -91,7 +91,32 @@ Run:
 python eval.py --configs=configs/bi_lstm.yml
 ```
 
+### Fine-tuning a Model on MELD
 
+- Download dataset from https://affective-meld.github.io/ 
+- Extract .wav files using:
+```bash
+python extract_audios.py
+```
+- Ensure that `config/bi_lstm.yaml` is set to `MELD_data/train_reformatted_features.txt` and `MELD_data/test_reformatted_features.txt`. 
+- Adjust the model name in `config/bi_lstm.yaml` to `BiLSTM` or `StackedLSTMAdditiveAttention`
+- Set the path to the trained model
+
+Run:
+
+```bash
+python fine_tune_meld.py
+```
+
+### Evaluating Model Confidence
+
+* Ensure that the `eval_confidence.py` file points to the correct model checkpoint. 
+* Example path: models/StackedLSTMAdditiveAttention_CustomFeature/best_model/
+
+Run:
+
+```bash
+python eval_confidence.py --configs=configs/bi_lstm.yml
 
 ## Features
 
