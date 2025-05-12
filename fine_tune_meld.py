@@ -3,6 +3,7 @@ from mser.trainer import MSERTrainer
 
 # Path to config and pretrained model
 config_path = "configs/bi_lstm.yml"  # updated for MELD paths
+## MAKE SURE to set train and test variables in config to MELD_data/train_reformatted.txt and MELD_data/test_reformatted.txt
 pretrained_model_path = "trained_models/vanilla/model.pth"  # path to RAVDESS pretrained checkpoint
 save_model_path = "trained_models/meld/"
 log_dir = "log/"
@@ -12,10 +13,6 @@ trainer = MSERTrainer(
     configs=config_path,
     use_gpu=True
 )
-
-# Optional: Freeze LSTM layers if only fine-tuning the attention and classification head
-# for param in trainer.model.lstm.parameters():
-#     param.requires_grad = False
 
 # Start training
 trainer.train(
