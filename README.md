@@ -80,7 +80,7 @@ Run:
 python CUDA_VISIBLE_DEVICES=0 python train.py --configs=configs/bi_lstm.yml
 ```
 
-### Evaluating a Model
+### Evaluating a Model (RAVDESS)
 
 * Ensure that the `eval.py` file points to the correct model checkpoint. 
 * Example path: models/StackedLSTMAdditiveAttention_CustomFeature/best_model/
@@ -108,7 +108,7 @@ Run:
 python fine_tune_meld.py
 ```
 
-### Evaluating Model Confidence
+### Evaluating Model Confidence (any model)
 
 * Ensure that the `eval_confidence.py` file points to the correct model checkpoint. 
 * Example path: models/StackedLSTMAdditiveAttention_CustomFeature/best_model/
