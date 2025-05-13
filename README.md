@@ -117,6 +117,7 @@ Run:
 
 ```bash
 python eval_confidence.py --configs=configs/bi_lstm.yml
+```
 
 ## Features
 
